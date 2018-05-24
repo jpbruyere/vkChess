@@ -16,6 +16,7 @@
 #include <vector>
 #include "vulkan/vulkan.h"
 #include "macros.h"
+#include "VulkanBuffer.hpp"
 
 namespace vks
 {
@@ -226,56 +227,49 @@ namespace vks
         *
         * @param usageFlags Usage flag bitmask for the buffer (i.e. index, vertex, uniform buffer)
         * @param memoryPropertyFlags Memory properties for this buffer (i.e. device local, host visible, coherent)
+        * @param buffer Pointer to a vk::Vulkan buffer object
         * @param size Size of the buffer in byes
-        * @param buffer Pointer to the buffer handle acquired by the function
-        * @param memory Pointer to the memory handle acquired by the function
         * @param data Pointer to the data that should be copied to the buffer after creation (optional, if not set, no data is copied over)
         *
         * @return VK_SUCCESS if buffer handle and memory have been created and (optionally passed) data has been copied
         */
-        VkResult createBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, VkDeviceSize size, VkBuffer *buffer, VkDeviceMemory *memory, void *data = nullptr)
+        VkResult createBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, vks::Buffer *buffer, VkDeviceSize size, void *data = nullptr)
         {
+            buffer->device = logicalDevice;
+
             // Create the buffer handle
-            VkBufferCreateInfo bufferCreateInfo{};
-            bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            bufferCreateInfo.usage = usageFlags;
-            bufferCreateInfo.size = size;
-            bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            VK_CHECK_RESULT(vkCreateBuffer(logicalDevice, &bufferCreateInfo, nullptr, buffer));
+            VkBufferCreateInfo bufferCreateInfo =
+            {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, usageFlags, size, VK_SHARING_MODE_EXCLUSIVE};
+            VK_CHECK_RESULT(vkCreateBuffer(logicalDevice, &bufferCreateInfo, nullptr, &buffer->buffer));
 
             // Create the memory backing up the buffer handle
             VkMemoryRequirements memReqs;
-            VkMemoryAllocateInfo memAlloc{};
-            memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            vkGetBufferMemoryRequirements(logicalDevice, *buffer, &memReqs);
+            vkGetBufferMemoryRequirements(logicalDevice, buffer->buffer, &memReqs);
+
+            VkMemoryAllocateInfo memAlloc = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
             memAlloc.allocationSize = memReqs.size;
-            // Find a memory type index that fits the properties of the buffer
             memAlloc.memoryTypeIndex = getMemoryType(memReqs.memoryTypeBits, memoryPropertyFlags);
-            VK_CHECK_RESULT(vkAllocateMemory(logicalDevice, &memAlloc, nullptr, memory));
+
+            VK_CHECK_RESULT(vkAllocateMemory(logicalDevice, &memAlloc, nullptr, &buffer->memory));
+
+            buffer->alignment = memReqs.alignment;
+            buffer->size = memAlloc.allocationSize;
+            buffer->usageFlags = usageFlags;
+            buffer->memoryPropertyFlags = memoryPropertyFlags;
 
             // If a pointer to the buffer data has been passed, map the buffer and copy over the data
             if (data != nullptr)
             {
-                void *mapped;
-                VK_CHECK_RESULT(vkMapMemory(logicalDevice, *memory, 0, size, 0, &mapped));
-                memcpy(mapped, data, size);
-                // If host coherency hasn't been requested, do a manual flush to make writes visible
-                if ((memoryPropertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0)
-                {
-                    VkMappedMemoryRange mappedRange{};
-                    mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-                    mappedRange.memory = *memory;
-                    mappedRange.offset = 0;
-                    mappedRange.size = size;
-                    vkFlushMappedMemoryRanges(logicalDevice, 1, &mappedRange);
-                }
-                vkUnmapMemory(logicalDevice, *memory);
+                VK_CHECK_RESULT(buffer->map());
+                memcpy(buffer->mapped, data, size);
+                buffer->unmap();
             }
 
-            // Attach the memory to the buffer object
-            VK_CHECK_RESULT(vkBindBufferMemory(logicalDevice, *buffer, *memory, 0));
+            // Initialize a default descriptor that covers the whole buffer size
+            buffer->setupDescriptor();
 
-            return VK_SUCCESS;
+            // Attach the memory to the buffer object
+            return buffer->bind();
         }
 
         /**

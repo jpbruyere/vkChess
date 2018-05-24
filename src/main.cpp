@@ -106,17 +106,11 @@ public:
         vkglTF::Model skybox;
     } models;
 
-    struct Buffer {
-        VkBuffer buffer;
-        VkDeviceMemory memory;
-        VkDescriptorBufferInfo descriptor;
-        void *mapped;
-    };
 
     struct UniformBuffers {
-        Buffer object;
-        Buffer skybox;
-        Buffer params;
+        vks::Buffer object;
+        vks::Buffer skybox;
+        vks::Buffer params;
     } uniformBuffers;
 
     struct UBOMatrices {
@@ -189,12 +183,9 @@ public:
         models.object.destroy(device);
         models.skybox.destroy(device);
 
-        vkDestroyBuffer(device, uniformBuffers.object.buffer, nullptr);
-        vkFreeMemory(device, uniformBuffers.object.memory, nullptr);
-        vkDestroyBuffer(device, uniformBuffers.skybox.buffer, nullptr);
-        vkFreeMemory(device, uniformBuffers.skybox.memory, nullptr);
-        vkDestroyBuffer(device, uniformBuffers.params.buffer, nullptr);
-        vkFreeMemory(device, uniformBuffers.params.memory, nullptr);
+        uniformBuffers.object.destroy();
+        uniformBuffers.skybox.destroy();
+        uniformBuffers.params.destroy();
 
         textures.environmentCube.destroy();
         textures.irradianceCube.destroy();
@@ -1473,35 +1464,27 @@ public:
         VK_CHECK_RESULT(vulkanDevice->createBuffer(
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            sizeof(uboMatrices),
-            &uniformBuffers.object.buffer,
-            &uniformBuffers.object.memory));
+            &uniformBuffers.object,
+            sizeof(uboMatrices)));
 
         // Skybox vertex shader uniform buffer
         VK_CHECK_RESULT(vulkanDevice->createBuffer(
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            sizeof(uboMatrices),
-            &uniformBuffers.skybox.buffer,
-            &uniformBuffers.skybox.memory));
+            &uniformBuffers.skybox,
+            sizeof(uboMatrices)));
 
         // Shared parameter uniform buffer
         VK_CHECK_RESULT(vulkanDevice->createBuffer(
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            sizeof(uboParams),
-            &uniformBuffers.params.buffer,
-            &uniformBuffers.params.memory));
-
-        // Descriptors
-        uniformBuffers.object.descriptor = { uniformBuffers.object.buffer, 0, sizeof(uboMatrices) };
-        uniformBuffers.skybox.descriptor = { uniformBuffers.skybox.buffer, 0, sizeof(uboMatrices) };
-        uniformBuffers.params.descriptor = { uniformBuffers.params.buffer, 0, sizeof(uboParams) };
+            &uniformBuffers.params,
+            sizeof(uboParams)));
 
         // Map persistent
-        VK_CHECK_RESULT(vkMapMemory(device, uniformBuffers.object.memory, 0, sizeof(uboMatrices), 0, &uniformBuffers.object.mapped));
-        VK_CHECK_RESULT(vkMapMemory(device, uniformBuffers.skybox.memory, 0, sizeof(uboMatrices), 0, &uniformBuffers.skybox.mapped));
-        VK_CHECK_RESULT(vkMapMemory(device, uniformBuffers.params.memory, 0, sizeof(uboParams), 0, &uniformBuffers.params.mapped));
+        uniformBuffers.skybox.map();
+        uniformBuffers.object.map();
+        uniformBuffers.params.map();
 
         updateUniformBuffers();
         updateParams();
@@ -1515,17 +1498,17 @@ public:
         uboMatrices.model = glm::mat4(1.0f);
         uboMatrices.model = glm::rotate(uboMatrices.model, rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
         uboMatrices.camPos = camera.position * -1.0f;
-        memcpy(uniformBuffers.object.mapped, &uboMatrices, sizeof(uboMatrices));
+        uniformBuffers.object.copyTo (&uboMatrices, sizeof(uboMatrices));
 
         // Skybox
         uboMatrices.model = glm::mat4(glm::mat3(camera.matrices.view));
-        memcpy(uniformBuffers.skybox.mapped, &uboMatrices, sizeof(uboMatrices));
+        uniformBuffers.skybox.copyTo(&uboMatrices, sizeof(uboMatrices));
     }
 
     void updateParams()
     {
         uboParams.lightDir = glm::vec4(0.0f, -0.5f, -0.5f, 1.0f);
-        memcpy(uniformBuffers.params.mapped, &uboParams, sizeof(uboParams));
+        uniformBuffers.params.copyTo(&uboParams, sizeof(uboParams));
     }
 
     void prepare()
