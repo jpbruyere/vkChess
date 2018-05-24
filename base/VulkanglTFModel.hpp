@@ -320,9 +320,12 @@ namespace vkglTF
         glTF primitive class
     */
     struct Primitive {
-        uint32_t firstIndex;
-        uint32_t indexCount;
-        Material &material;
+        std::string name;
+        uint32_t    indexBase;
+        uint32_t    indexCount;
+        uint32_t    vertexBase;
+        uint32_t    vertexCount;
+        Material*   material;
     };
 
     /*
@@ -402,9 +405,12 @@ namespace vkglTF
                     if (primitive.indices < 0) {
                         continue;
                     }
-                    uint32_t indexStart = static_cast<uint32_t>(indexBuffer.size());
-                    uint32_t vertexStart = static_cast<uint32_t>(vertexBuffer.size());
-                    uint32_t indexCount = 0;
+                    Primitive modPart;
+                    modPart.indexBase = static_cast<uint32_t>(indexBuffer.size());
+                    modPart.vertexBase = static_cast<uint32_t>(vertexBuffer.size());
+                    modPart.material = &materials[primitive.material];
+                    modPart.name = node.name;
+
                     // Vertices
                     {
                         const float *bufferPos = nullptr;
@@ -430,6 +436,7 @@ namespace vkglTF
                             bufferTexCoords = reinterpret_cast<const float *>(&(model.buffers[uvView.buffer].data[uvAccessor.byteOffset + uvView.byteOffset]));
                         }
 
+                        modPart.vertexCount = posAccessor.count;
                         for (size_t v = 0; v < posAccessor.count; v++) {
                             Vertex vert{};
                             vert.pos = localNodeMatrix * glm::vec4(glm::make_vec3(&bufferPos[v * 3]), 1.0f);
@@ -448,14 +455,14 @@ namespace vkglTF
                         const tinygltf::BufferView &bufferView = model.bufferViews[accessor.bufferView];
                         const tinygltf::Buffer &buffer = model.buffers[bufferView.buffer];
 
-                        indexCount = static_cast<uint32_t>(accessor.count);
+                        modPart.indexCount = static_cast<uint32_t>(accessor.count);
 
                         switch (accessor.componentType) {
                         case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT: {
                             uint32_t *buf = new uint32_t[accessor.count];
                             memcpy(buf, &buffer.data[accessor.byteOffset + bufferView.byteOffset], accessor.count * sizeof(uint32_t));
                             for (size_t index = 0; index < accessor.count; index++) {
-                                indexBuffer.push_back(buf[index] + vertexStart);
+                                indexBuffer.push_back(buf[index]);
                             }
                             break;
                         }
@@ -463,7 +470,7 @@ namespace vkglTF
                             uint16_t *buf = new uint16_t[accessor.count];
                             memcpy(buf, &buffer.data[accessor.byteOffset + bufferView.byteOffset], accessor.count * sizeof(uint16_t));
                             for (size_t index = 0; index < accessor.count; index++) {
-                                indexBuffer.push_back(buf[index] + vertexStart);
+                                indexBuffer.push_back(buf[index]);
                             }
                             break;
                         }
@@ -471,7 +478,7 @@ namespace vkglTF
                             uint8_t *buf = new uint8_t[accessor.count];
                             memcpy(buf, &buffer.data[accessor.byteOffset + bufferView.byteOffset], accessor.count * sizeof(uint8_t));
                             for (size_t index = 0; index < accessor.count; index++) {
-                                indexBuffer.push_back(buf[index] + vertexStart);
+                                indexBuffer.push_back(buf[index]);
                             }
                             break;
                         }
@@ -480,7 +487,7 @@ namespace vkglTF
                             return;
                         }
                     }
-                    primitives.push_back({ indexStart, indexCount, materials[primitive.material] });
+                    primitives.push_back (modPart);
                 }
             }
         }
@@ -643,7 +650,7 @@ namespace vkglTF
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertices.buffer, offsets);
             vkCmdBindIndexBuffer(commandBuffer, indices.buffer, 0, VK_INDEX_TYPE_UINT32);
             for (auto primitive : primitives) {
-                vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.firstIndex, 0, 0);
+                vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.indexBase, 0, 0);
             }
         }
     };
