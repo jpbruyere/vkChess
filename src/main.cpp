@@ -207,21 +207,21 @@ public:
 
         std::array<VkDescriptorSet, 2> descriptorsets = {
             descriptorSets.object,
-            material->descriptorSet,
+            model.descriptorSets[primitive.material]
         };
 
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 2, descriptorsets.data(), 0, NULL);
 
         // Pass material parameters as push constants
         PushConstBlockMaterial pushConstBlockMaterial{
-            static_cast<float>(material->baseColorTexture != nullptr),
-            static_cast<float>(material->metallicRoughnessTexture != nullptr),
-            static_cast<float>(material->normalTexture != nullptr),
-            static_cast<float>(material->occlusionTexture != nullptr),
-            static_cast<float>(material->emissiveTexture != nullptr),
+            static_cast<float>(material->baseColorTexture > 0),
+            static_cast<float>(material->metallicRoughnessTexture > 0),
+            static_cast<float>(material->normalTexture  > 0),
+            static_cast<float>(material->occlusionTexture  > 0),
+            static_cast<float>(material->emissiveTexture  > 0),
             material->metallicFactor,
             material->roughnessFactor,
-            static_cast<float>(material->alphaMode == vkglTF::Material::ALPHAMODE_MASK),
+            static_cast<float>(material->alphaMode == vkglTF::ALPHAMODE_MASK),
             material->alphaCutoff
         };
         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstBlockMaterial), &pushConstBlockMaterial);
@@ -286,7 +286,7 @@ public:
             vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
 
             for (auto primitive : model.primitives) {
-                if (model.materials[primitive.material].alphaMode != vkglTF::Material::ALPHAMODE_BLEND) {
+                if (model.materials[primitive.material].alphaMode != vkglTF::ALPHAMODE_BLEND) {
                     renderPrimitive(model, primitive, drawCmdBuffers[i]);
                 }
             }
@@ -295,7 +295,7 @@ public:
             // TODO: Correct depth sorting
             vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbrAlphaBlend);
             for (auto primitive : model.primitives) {
-                if (model.materials[primitive.material].alphaMode == vkglTF::Material::ALPHAMODE_BLEND) {
+                if (model.materials[primitive.material].alphaMode == vkglTF::ALPHAMODE_BLEND) {
                     renderPrimitive(model, primitive, drawCmdBuffers[i]);
                 }
             }
@@ -442,6 +442,9 @@ public:
             descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
             VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCI, nullptr, &descriptorSetLayouts.material));
 
+            models.object.descriptorSets.resize(models.object.materials.size());
+
+            int matIdx = 0;
             // Per-Material descriptor sets
             for (auto &material : models.object.materials) {
                 VkDescriptorSetAllocateInfo descriptorSetAllocInfo{};
@@ -449,14 +452,14 @@ public:
                 descriptorSetAllocInfo.descriptorPool = descriptorPool;
                 descriptorSetAllocInfo.pSetLayouts = &descriptorSetLayouts.material;
                 descriptorSetAllocInfo.descriptorSetCount = 1;
-                VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &descriptorSetAllocInfo, &material.descriptorSet));
+                VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &descriptorSetAllocInfo, &models.object.descriptorSets[matIdx]));
 
                 std::vector<VkDescriptorImageInfo> imageDescriptors = {
-                    material.baseColorTexture ? material.baseColorTexture->descriptor : textures.empty.descriptor,
-                    material.normalTexture ? material.normalTexture->descriptor : textures.empty.descriptor,
-                    material.occlusionTexture ? material.occlusionTexture->descriptor : textures.empty.descriptor,
-                    material.metallicRoughnessTexture ? material.metallicRoughnessTexture->descriptor : textures.empty.descriptor,
-                    material.emissiveTexture ? material.emissiveTexture->descriptor : textures.empty.descriptor
+                    material.baseColorTexture > 0 ? models.object.textures[material.baseColorTexture-1].descriptor : textures.empty.descriptor,
+                    material.normalTexture > 0 ? models.object.textures[material.normalTexture-1].descriptor : textures.empty.descriptor,
+                    material.occlusionTexture > 0 ? models.object.textures[material.occlusionTexture-1].descriptor : textures.empty.descriptor,
+                    material.metallicRoughnessTexture > 0 ? models.object.textures[material.metallicRoughnessTexture-1].descriptor : textures.empty.descriptor,
+                    material.emissiveTexture > 0 ? models.object.textures[material.emissiveTexture-1].descriptor : textures.empty.descriptor
                 };
 
                 std::array<VkWriteDescriptorSet, 5> writeDescriptorSets{};
@@ -464,12 +467,13 @@ public:
                     writeDescriptorSets[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
                     writeDescriptorSets[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
                     writeDescriptorSets[i].descriptorCount = 1;
-                    writeDescriptorSets[i].dstSet = material.descriptorSet;
+                    writeDescriptorSets[i].dstSet = models.object.descriptorSets[matIdx];
                     writeDescriptorSets[i].dstBinding = static_cast<uint32_t>(i);
                     writeDescriptorSets[i].pImageInfo = &imageDescriptors[i];
                 }
 
                 vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+                matIdx++;
             }
         }
 

@@ -302,18 +302,18 @@ namespace vkglTF
     /*
         glTF material class
     */
+    enum AlphaMode : unsigned char { ALPHAMODE_OPAQUE, ALPHAMODE_MASK, ALPHAMODE_BLEND };
+
     struct Material {
-        enum AlphaMode{ ALPHAMODE_OPAQUE, ALPHAMODE_MASK, ALPHAMODE_BLEND };
         AlphaMode alphaMode = ALPHAMODE_OPAQUE;
         float alphaCutoff = 1.0f;
         float metallicFactor = 1.0f;
         float roughnessFactor = 1.0f;
-        vkglTF::Texture *baseColorTexture;
-        vkglTF::Texture *metallicRoughnessTexture;
-        vkglTF::Texture *normalTexture;
-        vkglTF::Texture *occlusionTexture;
-        vkglTF::Texture *emissiveTexture;
-        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        uint32_t baseColorTexture = 0;
+        uint32_t metallicRoughnessTexture = 0;
+        uint32_t normalTexture = 0;
+        uint32_t occlusionTexture = 0;
+        uint32_t emissiveTexture = 0;
     };
 
     /*
@@ -332,6 +332,7 @@ namespace vkglTF
         glTF model loading and rendering class
     */
     struct Model {
+        uint32_t textureSize = 512; //texture array size w/h
 
         struct Vertex {
             glm::vec3 pos;
@@ -351,8 +352,9 @@ namespace vkglTF
 
         std::vector<Primitive> primitives;
 
-        std::vector<Texture> textures;
-        std::vector<Material> materials;
+        std::vector<Texture>            textures;
+        std::vector<Material>           materials;
+        std::vector<VkDescriptorSet>    descriptorSets;
 
         void destroy(VkDevice device)
         {
@@ -506,10 +508,10 @@ namespace vkglTF
             for (tinygltf::Material &mat : gltfModel.materials) {
                 vkglTF::Material material{};
                 if (mat.values.find("baseColorTexture") != mat.values.end()) {
-                    material.baseColorTexture = &textures[gltfModel.textures[mat.values["baseColorTexture"].TextureIndex()].source];
+                    material.baseColorTexture = gltfModel.textures[mat.values["baseColorTexture"].TextureIndex()].source + 1;
                 }
                 if (mat.values.find("metallicRoughnessTexture") != mat.values.end()) {
-                    material.metallicRoughnessTexture = &textures[gltfModel.textures[mat.values["metallicRoughnessTexture"].TextureIndex()].source];
+                    material.metallicRoughnessTexture = gltfModel.textures[mat.values["metallicRoughnessTexture"].TextureIndex()].source + 1;
                 }
                 if (mat.values.find("roughnessFactor") != mat.values.end()) {
                     material.roughnessFactor = static_cast<float>(mat.values["roughnessFactor"].Factor());
@@ -518,21 +520,21 @@ namespace vkglTF
                     material.metallicFactor = static_cast<float>(mat.values["metallicFactor"].Factor());
                 }
                 if (mat.additionalValues.find("normalTexture") != mat.additionalValues.end()) {
-                    material.normalTexture = &textures[gltfModel.textures[mat.additionalValues["normalTexture"].TextureIndex()].source];
+                    material.normalTexture = gltfModel.textures[mat.additionalValues["normalTexture"].TextureIndex()].source + 1;
                 }
                 if (mat.additionalValues.find("emissiveTexture") != mat.additionalValues.end()) {
-                    material.emissiveTexture = &textures[gltfModel.textures[mat.additionalValues["emissiveTexture"].TextureIndex()].source];
+                    material.emissiveTexture = gltfModel.textures[mat.additionalValues["emissiveTexture"].TextureIndex()].source + 1;
                 }
                 if (mat.additionalValues.find("occlusionTexture") != mat.additionalValues.end()) {
-                    material.occlusionTexture = &textures[gltfModel.textures[mat.additionalValues["occlusionTexture"].TextureIndex()].source];
+                    material.occlusionTexture = gltfModel.textures[mat.additionalValues["occlusionTexture"].TextureIndex()].source + 1;
                 }
                 if (mat.additionalValues.find("alphaMode") != mat.additionalValues.end()) {
                     tinygltf::Parameter param = mat.additionalValues["alphaMode"];
                     if (param.string_value == "BLEND") {
-                        material.alphaMode = Material::ALPHAMODE_BLEND;
+                        material.alphaMode = ALPHAMODE_BLEND;
                     }
                     if (param.string_value == "MASK") {
-                        material.alphaMode = Material::ALPHAMODE_MASK;
+                        material.alphaMode = ALPHAMODE_MASK;
                     }
                 }
                 if (mat.additionalValues.find("alphaCutoff") != mat.additionalValues.end()) {
