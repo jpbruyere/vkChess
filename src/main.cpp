@@ -203,24 +203,26 @@ public:
     }
 
     void renderPrimitive(vkglTF::Model &model, vkglTF::Primitive &primitive, VkCommandBuffer commandBuffer) {
+        vkglTF::Material* material = &model.materials[primitive.material];
+
         std::array<VkDescriptorSet, 2> descriptorsets = {
             descriptorSets.object,
-            primitive.material->descriptorSet,
+            material->descriptorSet,
         };
 
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 2, descriptorsets.data(), 0, NULL);
 
         // Pass material parameters as push constants
         PushConstBlockMaterial pushConstBlockMaterial{
-            static_cast<float>(primitive.material->baseColorTexture != nullptr),
-            static_cast<float>(primitive.material->metallicRoughnessTexture != nullptr),
-            static_cast<float>(primitive.material->normalTexture != nullptr),
-            static_cast<float>(primitive.material->occlusionTexture != nullptr),
-            static_cast<float>(primitive.material->emissiveTexture != nullptr),
-            primitive.material->metallicFactor,
-            primitive.material->roughnessFactor,
-            static_cast<float>(primitive.material->alphaMode == vkglTF::Material::ALPHAMODE_MASK),
-            primitive.material->alphaCutoff
+            static_cast<float>(material->baseColorTexture != nullptr),
+            static_cast<float>(material->metallicRoughnessTexture != nullptr),
+            static_cast<float>(material->normalTexture != nullptr),
+            static_cast<float>(material->occlusionTexture != nullptr),
+            static_cast<float>(material->emissiveTexture != nullptr),
+            material->metallicFactor,
+            material->roughnessFactor,
+            static_cast<float>(material->alphaMode == vkglTF::Material::ALPHAMODE_MASK),
+            material->alphaCutoff
         };
         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstBlockMaterial), &pushConstBlockMaterial);
 
@@ -284,7 +286,7 @@ public:
             vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
 
             for (auto primitive : model.primitives) {
-                if (primitive.material->alphaMode != vkglTF::Material::ALPHAMODE_BLEND) {
+                if (model.materials[primitive.material].alphaMode != vkglTF::Material::ALPHAMODE_BLEND) {
                     renderPrimitive(model, primitive, drawCmdBuffers[i]);
                 }
             }
@@ -293,7 +295,7 @@ public:
             // TODO: Correct depth sorting
             vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbrAlphaBlend);
             for (auto primitive : model.primitives) {
-                if (primitive.material->alphaMode == vkglTF::Material::ALPHAMODE_BLEND) {
+                if (model.materials[primitive.material].alphaMode == vkglTF::Material::ALPHAMODE_BLEND) {
                     renderPrimitive(model, primitive, drawCmdBuffers[i]);
                 }
             }

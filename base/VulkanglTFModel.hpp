@@ -325,7 +325,7 @@ namespace vkglTF
         uint32_t    indexCount;
         uint32_t    vertexBase;
         uint32_t    vertexCount;
-        Material*   material;
+        uint32_t    material;
     };
 
     /*
@@ -408,7 +408,7 @@ namespace vkglTF
                     Primitive modPart;
                     modPart.indexBase = static_cast<uint32_t>(indexBuffer.size());
                     modPart.vertexBase = static_cast<uint32_t>(vertexBuffer.size());
-                    modPart.material = &materials[primitive.material];
+                    modPart.material = primitive.material;
                     modPart.name = node.name;
 
                     // Vertices
@@ -650,7 +650,7 @@ namespace vkglTF
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertices.buffer, offsets);
             vkCmdBindIndexBuffer(commandBuffer, indices.buffer, 0, VK_INDEX_TYPE_UINT32);
             for (auto primitive : primitives) {
-                vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.indexBase, 0, 0);
+                vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.indexBase, primitive.vertexBase, 0);
             }
         }
     };
