@@ -3,7 +3,24 @@
 layout (location = 0) in vec3 inWorldPos;
 layout (location = 1) in vec3 inNormal;
 layout (location = 2) in vec2 inUV;
+layout (location = 3) flat in int inMatIdx;
 
+struct Material {
+	uint alphaMode;
+	float alphaCutoff;
+	float metallicFactor;
+	float roughnessFactor;
+
+	uint baseColorTexture;
+	uint metallicRoughnessTexture;
+	uint normalTexture;
+	uint occlusionTexture;
+
+	uint emissiveTexture;
+	uint pad1;
+	uint pad2;
+	uint pad3;
+};
 // Scene bindings
 
 layout (set = 0, binding = 0) uniform UBO {
@@ -26,13 +43,18 @@ layout (set = 0, binding = 4) uniform sampler2D samplerBRDFLUT;
 
 // Material bindings
 
-layout (set = 1, binding = 0) uniform sampler2D albedoMap;
+layout (set = 1, binding = 0) uniform sampler2DArray maps;
+layout (set = 1, binding = 1) uniform UBOMaterial
+{
+	Material mats[16];
+} uboMat;
+/*layout (set = 1, binding = 0) uniform sampler2D albedoMap;
 layout (set = 1, binding = 1) uniform sampler2D normalMap;
 layout (set = 1, binding = 2) uniform sampler2D aoMap;
 layout (set = 1, binding = 3) uniform sampler2D metallicMap;
-layout (set = 1, binding = 4) uniform sampler2D emissiveMap;
+layout (set = 1, binding = 4) uniform sampler2D emissiveMap;*/
 
-layout (push_constant) uniform Material {
+layout (push_constant) uniform Material_ubo {
 	float hasBaseColorTexture;
 	float hasMetallicRoughnessTexture;
 	float hasNormalTexture;
@@ -47,7 +69,7 @@ layout (push_constant) uniform Material {
 layout (location = 0) out vec4 outColor;
 
 #define PI 3.1415926535897932384626433832795
-#define ALBEDO pow(texture(albedoMap, inUV).rgb, vec3(2.2))
+#define ALBEDO pow(texture(albedoMap, vec3(inUV, uboMat.mats[inMatIdx].baseColorTexture - 1).rgb, vec3(2.2))
 
 // From http://filmicgames.com/archives/75
 vec3 Uncharted2Tonemap(vec3 x)
@@ -100,7 +122,7 @@ vec3 prefilteredReflection(vec3 R, float roughness)
 	return mix(a, b, lod - lodf);
 }
 
-vec3 specularContribution(vec3 L, vec3 V, vec3 N, vec3 F0, float metallic, float roughness)
+vec3 specularContribution(vec3 L, vec3 V, vec3 N, vec3 F0, float metallic, float roughness, vec3 albedo)
 {
 	// Precalculate vectors and dot products
 	vec3 H = normalize (V + L);
@@ -122,7 +144,7 @@ vec3 specularContribution(vec3 L, vec3 V, vec3 N, vec3 F0, float metallic, float
 		vec3 F = F_Schlick(dotNV, F0);
 		vec3 spec = D * F * G / (4.0 * dotNL * dotNV + 0.001);
 		vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
-		color += (kD * ALBEDO / PI + spec) * dotNL;
+		color += (kD * albedo / PI + spec) * dotNL;
 	}
 
 	return color;
@@ -131,7 +153,7 @@ vec3 specularContribution(vec3 L, vec3 V, vec3 N, vec3 F0, float metallic, float
 // See http://www.thetenthplanet.de/archives/1180
 vec3 perturbNormal()
 {
-	vec3 tangentNormal = texture(normalMap, inUV).xyz * 2.0 - 1.0;
+	vec3 tangentNormal = texture(maps, vec3(inUV, uboMat.mats[inMatIdx].normalTexture - 1)).xyz * 2.0 - 1.0;
 
 	vec3 q1 = dFdx(inWorldPos);
 	vec3 q2 = dFdy(inWorldPos);
@@ -148,35 +170,37 @@ vec3 perturbNormal()
 
 void main()
 {
-	if (material.alphaMask == 1.0f) {
-		if (texture(albedoMap, inUV).a < material.alphaMaskCutoff) {
+	vec4 rawAlbedo = texture(maps, vec3(inUV, uboMat.mats[inMatIdx].baseColorTexture-1));
+	if (uboMat.mats[inMatIdx].alphaMode == 1) {
+		if (rawAlbedo.a < uboMat.mats[inMatIdx].alphaCutoff) {
 			discard;
 		}
 	}
+	vec3 albedo = pow(rawAlbedo.rgb, vec3(2.2));
 
-	vec3 N = (material.hasNormalTexture == 1.0f) ? perturbNormal() : normalize(inNormal);
+	vec3 N = (uboMat.mats[inMatIdx].normalTexture > .0f) ? perturbNormal() : normalize(inNormal);
 	vec3 V = normalize(ubo.camPos - inWorldPos);
 	vec3 R = -normalize(reflect(V, N));
 
-	float metallic = material.metallicFactor;
-	float roughness = material.roughnessFactor;
-	if (material.hasMetallicRoughnessTexture == 1.0f) {
-		metallic *= texture(metallicMap, inUV).b;
-		roughness *= clamp(texture(metallicMap, inUV).g, 0.04, 1.0);
+	float metallic = uboMat.mats[inMatIdx].metallicFactor;
+	float roughness = uboMat.mats[inMatIdx].roughnessFactor;
+	if (uboMat.mats[inMatIdx].metallicRoughnessTexture > .0f) {
+		metallic *= texture(maps, vec3(inUV, uboMat.mats[inMatIdx].metallicRoughnessTexture - 1)).b;
+		roughness *= clamp(texture(maps, vec3(inUV, uboMat.mats[inMatIdx].metallicRoughnessTexture - 1)).g, 0.04, 1.0);
 	}
 
 	vec3 F0 = vec3(0.04);
-	F0 = mix(F0, ALBEDO, metallic);
+	F0 = mix(F0, albedo, metallic);
 
 	vec3 L = normalize(uboParams.lightDir.xyz);
-	vec3 Lo = specularContribution(L, V, N, F0, metallic, roughness);
+	vec3 Lo = specularContribution(L, V, N, F0, metallic, roughness, albedo);
 
 	vec2 brdf = texture(samplerBRDFLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
 	vec3 reflection = prefilteredReflection(R, roughness).rgb;
 	vec3 irradiance = texture(samplerIrradiance, N).rgb;
 
 	// Diffuse based on irradiance
-	vec3 diffuse = irradiance * ALBEDO;
+	vec3 diffuse = irradiance * albedo;
 
 	vec3 F = F_SchlickR(max(dot(N, V), 0.0), F0, roughness);
 
@@ -186,7 +210,7 @@ void main()
 	// Ambient part
 	vec3 kD = 1.0 - F;
 	kD *= 1.0 - metallic;
-	float ao = (material.hasOcclusionTexture == 1.0f) ? texture(aoMap, inUV).r : 1.0f;
+	float ao = (uboMat.mats[inMatIdx].occlusionTexture > .0f) ? texture(maps, vec3(inUV, uboMat.mats[inMatIdx].occlusionTexture - 1)).r : 1.0f;
 	vec3 ambient = (kD * diffuse + specular) * ao;
 	vec3 color = ambient + Lo;
 
@@ -196,12 +220,10 @@ void main()
 	// Gamma correction
 	color = pow(color, vec3(1.0f / uboParams.gamma));
 
-	if (material.hasEmissiveTexture == 1.0f) {
-		vec3 emissive = texture(emissiveMap, inUV).rgb;// * u_EmissiveFactor;
+	if (uboMat.mats[inMatIdx].emissiveTexture > .0f) {
+		vec3 emissive = texture(maps, vec3(inUV, uboMat.mats[inMatIdx].occlusionTexture - 1)).rgb;// * u_EmissiveFactor;
 		color += emissive;
 	}
 
-	float a = texture(albedoMap, inUV).a;
-
-	outColor = vec4(color, a);
+	outColor = vec4(color, rawAlbedo.a);
 }

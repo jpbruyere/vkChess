@@ -95,7 +95,7 @@ namespace vkglTF
                  VkImageUsageFlags _usage = VK_IMAGE_USAGE_SAMPLED_BIT) {
 
             device = _device;
-            uint32_t mipLevels = (uint32_t)floor(log2(std::max(infos.extent.width, infos.extent.height))) + 1;
+            uint32_t mipLevels = (uint32_t)floor(log2(std::max(width, height))) + 1;
 
             create(imageType, format, width, height,
                    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | _usage,
@@ -105,7 +105,6 @@ namespace vkglTF
 
             //imageLayout = _imageLayout;
             for (int l = 0; l < texArray.size(); l++) {
-
                 Texture* inTex = &texArray[l];
 
                 VkImageBlit firstMipBlit{};
@@ -131,15 +130,20 @@ namespace vkglTF
                 setImageLayout(blitCmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, mipSubRange,
                                         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-                setImageLayout(blitCmd, VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                /*setImageLayout(blitCmd, VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         mipSubRange,
-                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);*/
             }
+            //device->flushCommandBuffer(blitCmd, copyQueue, true);
             buildMipmaps(copyQueue, blitCmd);
 
             device->flushCommandBuffer(blitCmd, copyQueue, true);
+
+            createView(VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, infos.mipLevels, infos.arrayLayers);
+            createSampler(VK_FILTER_LINEAR,VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                          (float)infos.mipLevels,VK_TRUE,8.0f,VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE);
+
+            updateDescriptor();
         }
 
         /** @brief Update image descriptor from current sampler, view and image layout */
@@ -330,8 +334,8 @@ namespace vkglTF
             viewInfo.format     = infos.format;
             viewInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
             viewInfo.subresourceRange.aspectMask = aspectMask;
-            viewInfo.subresourceRange.layerCount = layerCount;
             viewInfo.subresourceRange.levelCount = levelCount;
+            viewInfo.subresourceRange.layerCount = layerCount;
             VK_CHECK_RESULT(vkCreateImageView(device->logicalDevice, &viewInfo, nullptr, &view));
         }
 
@@ -470,11 +474,16 @@ namespace vkglTF
         float alphaCutoff = 1.0f;
         float metallicFactor = 1.0f;
         float roughnessFactor = 1.0f;
+
         uint32_t baseColorTexture = 0;
         uint32_t metallicRoughnessTexture = 0;
         uint32_t normalTexture = 0;
         uint32_t occlusionTexture = 0;
+
         uint32_t emissiveTexture = 0;
+        uint32_t pad1;
+        uint32_t pad2;
+        uint32_t pad3;
     };
 
     /*
@@ -489,6 +498,11 @@ namespace vkglTF
         uint32_t    material;
     };
 
+    struct InstanceData {
+        uint32_t materialIndex = 0;
+        glm::mat4 modelMat = glm::mat4();
+    };
+
     /*
         glTF model loading and rendering class
     */
@@ -501,24 +515,35 @@ namespace vkglTF
             glm::vec2 uv;
         };
 
+        vks::VulkanDevice*  device;
+
         vks::Buffer vertices;
         vks::Buffer indices;
+        vks::Buffer instancesBuff;
+        vks::Buffer materialsBuff;
+        Texture*    texArray = NULL;
 
         std::vector<Primitive> primitives;
 
         std::vector<Texture>            textures;
         std::vector<Material>           materials;
-        std::vector<VkDescriptorSet>    descriptorSets;
+        std::vector<uint32_t>           instances;
+        std::vector<InstanceData>       instanceDatas;
+        //std::vector<VkDescriptorSet>    descriptorSets;
 
-        void destroy(VkDevice device)
+        void destroy()
         {
-            vkDestroyBuffer(device, vertices.buffer, nullptr);
-            vkFreeMemory(device, vertices.memory, nullptr);
-            vkDestroyBuffer(device, indices.buffer, nullptr);
-            vkFreeMemory(device, indices.memory, nullptr);
-            for (auto texture : textures) {
-                texture.destroy();
+            vertices.destroy();
+            indices.destroy();
+            instancesBuff.destroy();
+            materialsBuff.destroy();
+            if (texArray) {
+                texArray->destroy();
+                delete (texArray);
             }
+
+            for (Texture texture : textures)
+                texture.destroy();
         }
 
         void loadNode(const tinygltf::Node &node, const glm::mat4 &parentMatrix, const tinygltf::Model &model, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer, float globalscale)
@@ -648,17 +673,13 @@ namespace vkglTF
             }
         }
 
-        void loadImages(tinygltf::Model &gltfModel, vks::VulkanDevice *device, VkQueue transferQueue)
+        void loadImages(tinygltf::Model &gltfModel, vks::VulkanDevice *device, VkQueue transferQueue, bool loadOnly = false)
         {
             for (tinygltf::Image &image : gltfModel.images) {
                 vkglTF::Texture texture;
-                texture.fromglTfImage(image, device, transferQueue);
+                texture.fromglTfImage(image, device, transferQueue, loadOnly);
                 textures.push_back(texture);
             }
-
-            Texture testArray(device, transferQueue, VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, textures, 1024,1024);
-
-            testArray.destroy();
         }
 
         void loadMaterials(tinygltf::Model &gltfModel, vks::VulkanDevice *device, VkQueue transferQueue)
@@ -702,8 +723,11 @@ namespace vkglTF
             }
         }
 
-        void loadFromFile(std::string filename, vks::VulkanDevice *device, VkQueue transferQueue, float scale = 1.0f)
+        void loadFromFile(std::string filename, vks::VulkanDevice* _device, VkQueue transferQueue,
+                          bool instancedRendering = false, float scale = 1.0f)
         {
+            device = _device;//should be set in CTOR
+
             tinygltf::Model gltfModel;
             tinygltf::TinyGLTF gltfContext;
             std::string error;
@@ -726,8 +750,19 @@ namespace vkglTF
             std::vector<Vertex> vertexBuffer;
 
             if (fileLoaded) {
-                loadImages(gltfModel, device, transferQueue);
+                loadImages(gltfModel, device, transferQueue, instancedRendering);
+                if (instancedRendering){
+                    texArray = new Texture(device, transferQueue, VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, textures, textureSize, textureSize);
+                    for (Texture texture : textures){
+                        texture.destroy();
+                    }
+                    textures.clear();
+                }
                 loadMaterials(gltfModel, device, transferQueue);
+                if (instancedRendering){
+                    buildMaterialBuffer();
+                    updateMaterialBuffer();
+                }
                 const tinygltf::Scene &scene = gltfModel.scenes[gltfModel.defaultScene];
                 for (size_t i = 0; i < scene.nodes.size(); i++) {
                     const tinygltf::Node node = gltfModel.nodes[scene.nodes[i]];
@@ -793,14 +828,90 @@ namespace vkglTF
             indexStaging.destroy();
         }
 
-        void draw(VkCommandBuffer commandBuffer)
-        {
-            const VkDeviceSize offsets[1] = { 0 };
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertices.buffer, offsets);
-            vkCmdBindIndexBuffer(commandBuffer, indices.buffer, 0, VK_INDEX_TYPE_UINT32);
-            for (auto primitive : primitives) {
-                vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.indexBase, primitive.vertexBase, 0);
+        uint32_t addInstance(uint32_t modelIdx, uint32_t partIdx,const glm::mat4& modelMat){
+            uint32_t idx = instances.size();
+            instances.push_back (partIdx);
+            InstanceData id;
+            id.materialIndex = primitives[partIdx].material;
+            id.modelMat = modelMat;
+            instanceDatas.push_back(id);
+            return idx;
+        }
+        void buildCommandBuffer(VkCommandBuffer cmdBuff, bool drawInstanced = false){
+
+            VkDeviceSize offsets[1] = { 0 };
+
+            vkCmdBindVertexBuffers(cmdBuff, 0, 1, &vertices.buffer, offsets);
+            vkCmdBindIndexBuffer(cmdBuff, indices.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+            if (!drawInstanced) {
+                for (auto primitive : primitives)
+                    vkCmdDrawIndexed(cmdBuff, primitive.indexCount, 1, primitive.vertexBase, 0, 0);
+                return;
             }
+
+            vkCmdBindVertexBuffers(cmdBuff, 1, 1, &instancesBuff.buffer, offsets);
+
+            //uint32_t modIdx = instances[0].modelIndex;
+            uint32_t partIdx = instances[0];
+            uint32_t instCount = 0;
+            uint32_t instOffset = 0;
+
+            for (int i = 0; i < instances.size(); i++){
+                //if (modIdx != instances[i].modelIndex || partIdx != instances[i].partIndex) {
+                if (partIdx != instances[i]) {
+                    vkCmdDrawIndexed(cmdBuff,	primitives[partIdx].indexCount, instCount,
+                                                primitives[partIdx].indexBase,
+                                                primitives[partIdx].vertexBase, instOffset);
+
+                    //modIdx = instances[i].modelIndex;
+                    partIdx = instances[i];
+                    instCount = 0;
+                    instOffset = i;
+                }
+                instCount++;
+            }
+            if (instCount==0)
+                return;
+
+            vkCmdDrawIndexed(cmdBuff,	primitives[partIdx].indexCount, instCount,
+                                        primitives[partIdx].indexBase,
+                                        primitives[partIdx].vertexBase, instOffset);
+        }
+
+        void buildMaterialBuffer () {
+            VK_CHECK_RESULT(device->createBuffer(
+                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &materialsBuff,
+                sizeof(Material)*16));
+
+            VK_CHECK_RESULT(materialsBuff.map());
+            updateMaterialBuffer();
+        }
+        void buildInstanceBuffer (){
+            if (instancesBuff.size > 0){
+                vkDeviceWaitIdle(device->logicalDevice);
+                instancesBuff.destroy();
+            }
+
+            instancesBuff.size = instanceDatas.size() * sizeof(InstanceData);
+
+            VK_CHECK_RESULT(device->createBuffer(
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                &instancesBuff,
+                instancesBuff.size));
+
+            VK_CHECK_RESULT(instancesBuff.map());
+            updateInstancesBuffer();
+        }
+
+        void updateInstancesBuffer(){
+            memcpy(instancesBuff.mapped, instanceDatas.data(), instanceDatas.size() * sizeof(InstanceData));
+        }
+        void updateMaterialBuffer(){
+            memcpy(materialsBuff.mapped, materials.data(), sizeof(Material)*materials.size());
         }
     };
 }

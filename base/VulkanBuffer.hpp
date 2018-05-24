@@ -146,14 +146,13 @@ namespace vks
         */
         void destroy()
         {
+            unmap();
+
             if (buffer)
-            {
                 vkDestroyBuffer(device, buffer, nullptr);
-            }
+
             if (memory)
-            {
                 vkFreeMemory(device, memory, nullptr);
-            }
         }
 
     };
