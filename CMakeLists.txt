@@ -73,7 +73,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-add_definitions(-std=c++11)
+add_definitions(-std=c++11 -g)
 
 file(GLOB SOURCE *.cpp )
 

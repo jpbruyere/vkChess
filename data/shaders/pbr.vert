@@ -7,7 +7,7 @@ layout (location = 0) in vec3 inPos;
 layout (location = 1) in vec3 inNormal;
 layout (location = 2) in vec2 inUV;
 
-layout (binding = 0) uniform UBO 
+layout (binding = 0) uniform UBO
 {
 	mat4 projection;
 	mat4 model;
@@ -25,7 +25,7 @@ out gl_PerVertex
 	vec4 gl_Position;
 };
 
-void main() 
+void main()
 {
 	vec3 locPos = vec3(ubo.model * vec4(inPos, 1.0));
 	outWorldPos = locPos;
