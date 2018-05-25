@@ -48,23 +48,6 @@ layout (set = 1, binding = 1) uniform UBOMaterial
 {
 	Material mats[16];
 } uboMat;
-/*layout (set = 1, binding = 0) uniform sampler2D albedoMap;
-layout (set = 1, binding = 1) uniform sampler2D normalMap;
-layout (set = 1, binding = 2) uniform sampler2D aoMap;
-layout (set = 1, binding = 3) uniform sampler2D metallicMap;
-layout (set = 1, binding = 4) uniform sampler2D emissiveMap;*/
-
-layout (push_constant) uniform Material_ubo {
-	float hasBaseColorTexture;
-	float hasMetallicRoughnessTexture;
-	float hasNormalTexture;
-	float hasOcclusionTexture;
-	float hasEmissiveTexture;
-	float metallicFactor;
-	float roughnessFactor;
-	float alphaMask;
-	float alphaMaskCutoff;
-} material;
 
 layout (location = 0) out vec4 outColor;
 
@@ -221,7 +204,7 @@ void main()
 	color = pow(color, vec3(1.0f / uboParams.gamma));
 
 	if (uboMat.mats[inMatIdx].emissiveTexture > .0f) {
-		vec3 emissive = texture(maps, vec3(inUV, uboMat.mats[inMatIdx].occlusionTexture - 1)).rgb;// * u_EmissiveFactor;
+		vec3 emissive = texture(maps, vec3(inUV, uboMat.mats[inMatIdx].emissiveTexture - 1)).rgb;// * u_EmissiveFactor;
 		color += emissive;
 	}
 

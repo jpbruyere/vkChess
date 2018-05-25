@@ -507,7 +507,7 @@ namespace vkglTF
         glTF model loading and rendering class
     */
     struct Model {
-        uint32_t textureSize = 512; //texture array size w/h
+        uint32_t textureSize = 1024; //texture array size w/h
 
         struct Vertex {
             glm::vec3 pos;
@@ -836,6 +836,14 @@ namespace vkglTF
             id.modelMat = modelMat;
             instanceDatas.push_back(id);
             return idx;
+        }
+        uint32_t addInstance(std::string name, const glm::mat4& modelMat) {
+            for (int i=0; i<primitives.size(); i++) {
+                if (name != primitives[i].name)
+                    continue;
+                return addInstance(0,i,modelMat);
+            }
+            return 0;
         }
         void buildCommandBuffer(VkCommandBuffer cmdBuff, bool drawInstanced = false){
 

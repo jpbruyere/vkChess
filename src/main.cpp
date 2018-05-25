@@ -4,6 +4,7 @@
 * Note: Requires the separate asset pack (see data/README.md)
 *
 * Copyright (C) 2018 by Sascha Willems - www.saschawillems.de
+* Copyright (C) 2018 by jp_bruyere@hotmail.com (instanced rendering with texture array and material ubo)
 *
 * This code is licensed under the MIT license (MIT) (http://opensource.org/licenses/MIT)
 */
@@ -38,8 +39,7 @@
 */
 VkPipelineShaderStageCreateInfo loadShader(VkDevice device, std::string filename, VkShaderStageFlagBits stage)
 {
-    VkPipelineShaderStageCreateInfo shaderStage{};
-    shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    VkPipelineShaderStageCreateInfo shaderStage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
     shaderStage.stage = stage;
     shaderStage.pName = "main";
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
@@ -95,7 +95,6 @@ class VulkanExample : public VulkanExampleBase
 public:
     struct Textures {
         vks::TextureCubeMap environmentCube;
-        vks::Texture2D empty;
         vks::Texture2D lutBrdf;
         vks::TextureCubeMap irradianceCube;
         vks::TextureCubeMap prefilteredCube;
@@ -108,7 +107,7 @@ public:
 
 
     struct UniformBuffers {
-        vks::Buffer object;
+        vks::Buffer matrices;
         vks::Buffer skybox;
         vks::Buffer params;
     } uniformBuffers;
@@ -149,27 +148,15 @@ public:
 
     glm::vec3 rotation = glm::vec3(0.0f, 135.0f, 0.0f);
 
-    struct PushConstBlockMaterial {
-        float hasBaseColorTexture;
-        float hasMetallicRoughnessTexture;
-        float hasNormalTexture;
-        float hasOcclusionTexture;
-        float hasEmissiveTexture;
-        float metallicFactor;
-        float roughnessFactor;
-        float alphaMask;
-        float alphaMaskCutoff;
-    } pushConstBlockMaterial;
-
     VulkanExample() : VulkanExampleBase()
     {
         title = "Vulkan glTf 2.0 PBR";
         camera.type = Camera::CameraType::firstperson;
-        camera.movementSpeed = 2.0f;
-        camera.setPerspective(60.0f, (float)width / (float)height, 0.1f, 256.0f);
+        camera.movementSpeed = 8.0f;
+        camera.setPerspective(70.0f, (float)width / (float)height, 0.1f, 256.0f);
         camera.rotationSpeed = 0.25f;
-        camera.setRotation({ -12.0f, 152.0f, 0.0f });
-        camera.setPosition({ 1.05f, 0.31f, 1.85f });
+        camera.setRotation({ -32.0f, 0.0f, 0.0f });
+        camera.setPosition({ .05f, 6.31f, -10.85f });
     }
 
     ~VulkanExample()
@@ -184,7 +171,7 @@ public:
         models.object.destroy();
         models.skybox.destroy();
 
-        uniformBuffers.object.destroy();
+        uniformBuffers.matrices.destroy();
         uniformBuffers.skybox.destroy();
         uniformBuffers.params.destroy();
 
@@ -194,29 +181,13 @@ public:
         textures.lutBrdf.destroy();
     }
 
-    void renderPrimitive(vkglTF::Model &model, vkglTF::Primitive &primitive, VkCommandBuffer commandBuffer) {
-        vkglTF::Material* material = &model.materials[primitive.material];
-
+    void renderPrimitive(vkglTF::Primitive &primitive, VkCommandBuffer commandBuffer) {
         std::array<VkDescriptorSet, 2> descriptorsets = {
             descriptorSets.scene,
             descriptorSets.materials
         };
 
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 2, descriptorsets.data(), 0, NULL);
-
-        // Pass material parameters as push constants
-        PushConstBlockMaterial pushConstBlockMaterial{
-            static_cast<float>(material->baseColorTexture > 0),
-            static_cast<float>(material->metallicRoughnessTexture > 0),
-            static_cast<float>(material->normalTexture  > 0),
-            static_cast<float>(material->occlusionTexture  > 0),
-            static_cast<float>(material->emissiveTexture  > 0),
-            material->metallicFactor,
-            material->roughnessFactor,
-            static_cast<float>(material->alphaMode == vkglTF::ALPHAMODE_MASK),
-            material->alphaCutoff
-        };
-        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstBlockMaterial), &pushConstBlockMaterial);
 
         vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.indexBase, primitive.vertexBase, 0);
     }
@@ -269,10 +240,6 @@ public:
             vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.skybox, 0, NULL);
             vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
             models.skybox.buildCommandBuffer(drawCmdBuffers[i]);
-//
-            vkglTF::Model &model = models.object;
-            //vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &model.vertices.buffer, offsets);
-            //vkCmdBindIndexBuffer(drawCmdBuffers[i], model.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
 
             // Opaque primitives first
             vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
@@ -286,12 +253,6 @@ public:
 
             models.object.buildCommandBuffer(drawCmdBuffers[i], true);
 
-            /*for (auto primitive : model.primitives) {
-                if (model.materials[primitive.material].alphaMode != vkglTF::ALPHAMODE_BLEND) {
-                    renderPrimitive(model, primitive, drawCmdBuffers[i]);
-                }
-            }*/
-
             // Transparent last
             // TODO: Correct depth sorting
             /*vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbrAlphaBlend);
@@ -304,6 +265,35 @@ public:
             vkCmdEndRenderPass(drawCmdBuffers[i]);
             VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
         }
+    }
+
+    void loadChessAsset () {
+        models.object.loadFromFile("/home/jp/gltf/chess/blend.gltf", vulkanDevice, queue, true);
+        models.object.addInstance("Plane", glm::translate(glm::mat4(1.0),       glm::vec3( 0,0,0)));
+        models.object.addInstance("frame", glm::translate(glm::mat4(1.0),       glm::vec3( 0,0,0)));
+
+        models.object.addInstance("white_rook", glm::translate(glm::mat4(1.0),  glm::vec3(-7,0, 7)));
+        models.object.addInstance("white_rook", glm::translate(glm::mat4(1.0),  glm::vec3( 7,0, 7)));
+        models.object.addInstance("white_knight", glm::translate(glm::mat4(1.0),glm::vec3(-5,0, 7)));
+        models.object.addInstance("white_knight", glm::translate(glm::mat4(1.0),glm::vec3( 5,0, 7)));
+        models.object.addInstance("white_bishop", glm::translate(glm::mat4(1.0),glm::vec3(-3,0, 7)));
+        models.object.addInstance("white_bishop", glm::translate(glm::mat4(1.0),glm::vec3( 3,0, 7)));
+        models.object.addInstance("white_queen", glm::translate(glm::mat4(1.0), glm::vec3( 1,0, 7)));
+        models.object.addInstance("white_king", glm::translate(glm::mat4(1.0),  glm::vec3(-1,0, 7)));
+
+        for (int i=0; i<8; i++){
+            models.object.addInstance("white_pawn", glm::translate(glm::mat4(1.0),  glm::vec3(i*2-7,0, 5)));
+            models.object.addInstance("black_pawn", glm::translate(glm::mat4(1.0),  glm::vec3(i*2-7,0, -5)));
+        }
+
+        models.object.addInstance("black_rook", glm::translate(glm::mat4(1.0),  glm::vec3(-7,0,-7)));
+        models.object.addInstance("black_rook", glm::translate(glm::mat4(1.0),  glm::vec3( 7,0,-7)));
+        models.object.addInstance("black_knight", glm::translate(glm::mat4(1.0),glm::vec3(-5,0,-7)));
+        models.object.addInstance("black_knight", glm::translate(glm::mat4(1.0),glm::vec3( 5,0,-7)));
+        models.object.addInstance("black_bishop", glm::translate(glm::mat4(1.0),glm::vec3(-3,0,-7)));
+        models.object.addInstance("black_bishop", glm::translate(glm::mat4(1.0),glm::vec3( 3,0,-7)));
+        models.object.addInstance("black_queen", glm::translate(glm::mat4(1.0), glm::vec3( 1,0,-7)));
+        models.object.addInstance("black_king", glm::translate(glm::mat4(1.0),  glm::vec3(-1,0,-7)));
     }
 
     void loadAssets()
@@ -322,20 +312,20 @@ public:
             exit(-1);
         }
 #endif
-        textures.empty.loadFromFile(assetpath + "textures/empty.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
         textures.environmentCube.loadFromFile(assetpath + "textures/papermill_hdr16f_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
         models.skybox.loadFromFile(assetpath + "models/Box/glTF-Embedded/Box.gltf", vulkanDevice, queue);
         //models.object.loadFromFile(assetpath + "models/DamagedHelmet/glTF-Embedded/DamagedHelmet.gltf", vulkanDevice, queue);
         //models.object.loadFromFile("/home/jp/untitled.gltf", vulkanDevice, queue);
         //models.object.loadFromFile("/home/jp/games/chess2-gltf/scene.gltf", vulkanDevice, queue);
-        //models.object.loadFromFile("/home/jp/gltf/xwing/helmet.gltf", vulkanDevice, queue);
-        models.object.loadFromFile("/home/jp/gltf/chess/blend.gltf", vulkanDevice, queue, true);
-        for (int i=0; i<12; i++) {
-            models.object.addInstance(0,i,glm::translate(glm::mat4(1.0), glm::vec3(0,0,0)));
-            //models.object.addInstance(0,7+i,glm::translate(glm::mat4(1.0), glm::vec3(0,0,0)));
-        }
+        //models.object.loadFromFile("/home/jp/gltf/xwing/helmet.gltf", vulkanDevice, queue, true);
+
+        //models.object.loadFromFile(assetpath + "models/DamagedHelmet/glTF-Embedded/DamagedHelmet.gltf", vulkanDevice, queue, true);
+        //models.object.addInstance(0,0,glm::mat4(1.0));
+
+        loadChessAsset();
 
         models.object.buildInstanceBuffer();
+
         //models.object.loadFromFile("/home/jp/gltf/xwing/scene.gltf", vulkanDevice, queue);
     }
 
@@ -385,21 +375,19 @@ public:
                 { 3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr },//prefiltered cube
                 { 4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr },//lutBrdf
             };
-            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI{};
-            descriptorSetLayoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
             descriptorSetLayoutCI.pBindings = setLayoutBindings.data();
             descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
             VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCI, nullptr, &descriptorSetLayouts.scene));
 
-            VkDescriptorSetAllocateInfo descriptorSetAllocInfo{};
-            descriptorSetAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
             descriptorSetAllocInfo.descriptorPool = descriptorPool;
             descriptorSetAllocInfo.pSetLayouts = &descriptorSetLayouts.scene;
             descriptorSetAllocInfo.descriptorSetCount = 1;
             VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &descriptorSetAllocInfo, &descriptorSets.scene));
 
             std::array<VkWriteDescriptorSet, 5> writeDescriptorSets{
-                createWriteDS (descriptorSets.scene, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.object.descriptor),
+                createWriteDS (descriptorSets.scene, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.matrices.descriptor),
                 createWriteDS (descriptorSets.scene, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
                 createWriteDS (descriptorSets.scene, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.irradianceCube.descriptor),
                 createWriteDS (descriptorSets.scene, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &textures.prefilteredCube.descriptor),
@@ -415,14 +403,12 @@ public:
                 { 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr },
                 { 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr },
             };
-            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI{};
-            descriptorSetLayoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
             descriptorSetLayoutCI.pBindings = setLayoutBindings.data();
             descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
             VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCI, nullptr, &descriptorSetLayouts.material));
 
-            VkDescriptorSetAllocateInfo descriptorSetAllocInfo{};
-            descriptorSetAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
             descriptorSetAllocInfo.descriptorPool = descriptorPool;
             descriptorSetAllocInfo.pSetLayouts = &descriptorSetLayouts.material;
             descriptorSetAllocInfo.descriptorSetCount = 1;
@@ -506,11 +492,6 @@ public:
         VkPipelineLayoutCreateInfo pipelineLayoutCI = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         pipelineLayoutCI.setLayoutCount = 2;
         pipelineLayoutCI.pSetLayouts = setLayouts.data();
-        VkPushConstantRange pushConstantRange{};
-        pushConstantRange.size = sizeof(PushConstBlockMaterial);
-        pushConstantRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-        pipelineLayoutCI.pushConstantRangeCount = 1;
-        pipelineLayoutCI.pPushConstantRanges = &pushConstantRange;
         VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCI, nullptr, &pipelineLayout));
 
         // Vertex bindings an attributes
@@ -1420,7 +1401,7 @@ public:
         VK_CHECK_RESULT(vulkanDevice->createBuffer(
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &uniformBuffers.object,
+            &uniformBuffers.matrices,
             sizeof(uboMatrices)));
 
         // Skybox vertex shader uniform buffer
@@ -1439,7 +1420,7 @@ public:
 
         // Map persistent
         uniformBuffers.skybox.map();
-        uniformBuffers.object.map();
+        uniformBuffers.matrices.map();
         uniformBuffers.params.map();
 
         updateUniformBuffers();
@@ -1454,7 +1435,7 @@ public:
         uboMatrices.model = glm::mat4(1.0f);
         uboMatrices.model = glm::rotate(uboMatrices.model, rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
         uboMatrices.camPos = camera.position * -1.0f;
-        uniformBuffers.object.copyTo (&uboMatrices, sizeof(uboMatrices));
+        uniformBuffers.matrices.copyTo (&uboMatrices, sizeof(uboMatrices));
 
         // Skybox
         uboMatrices.model = glm::mat4(glm::mat3(camera.matrices.view));
