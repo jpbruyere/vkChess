@@ -4,79 +4,10 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "tiny_gltf.h"
 
+const VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 /*
     Utility functions
 */
-VkPipelineShaderStageCreateInfo loadShader(VkDevice device, std::string filename, VkShaderStageFlagBits stage)
-{
-    VkPipelineShaderStageCreateInfo shaderStage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
-    shaderStage.stage = stage;
-    shaderStage.pName = "main";
-#if defined(VK_USE_PLATFORM_ANDROID_KHR)
-    std::string assetpath = "shaders/" + filename;
-    AAsset* asset = AAssetManager_open(androidApp->activity->assetManager, assetpath.c_str(), AASSET_MODE_STREAMING);
-    assert(asset);
-    size_t size = AAsset_getLength(asset);
-    assert(size > 0);
-    char *shaderCode = new char[size];
-    AAsset_read(asset, shaderCode, size);
-    AAsset_close(asset);
-    VkShaderModule shaderModule;
-    VkShaderModuleCreateInfo moduleCreateInfo;
-    moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    moduleCreateInfo.pNext = NULL;
-    moduleCreateInfo.codeSize = size;
-    moduleCreateInfo.pCode = (uint32_t*)shaderCode;
-    moduleCreateInfo.flags = 0;
-    VK_CHECK_RESULT(vkCreateShaderModule(device, &moduleCreateInfo, NULL, &shaderStage.module));
-    delete[] shaderCode;
-#else
-    std::ifstream is("./../data/shaders/" + filename, std::ios::binary | std::ios::in | std::ios::ate);
-
-    if (is.is_open()) {
-        size_t size = is.tellg();
-        is.seekg(0, std::ios::beg);
-        char* shaderCode = new char[size];
-        is.read(shaderCode, size);
-        is.close();
-        assert(size > 0);
-        VkShaderModuleCreateInfo moduleCreateInfo{};
-        moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-        moduleCreateInfo.codeSize = size;
-        moduleCreateInfo.pCode = (uint32_t*)shaderCode;
-        vkCreateShaderModule(device, &moduleCreateInfo, NULL, &shaderStage.module);
-        delete[] shaderCode;
-    }
-    else {
-        std::cerr << "Error: Could not open shader file \"" << filename << "\"" << std::endl;
-        shaderStage.module = VK_NULL_HANDLE;
-    }
-
-#endif
-    assert(shaderStage.module != VK_NULL_HANDLE);
-    return shaderStage;
-}
-VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorBufferInfo* pDescBuffInfo)
-{
-    VkWriteDescriptorSet wds = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-    wds.dstSet = dstSet;
-    wds.descriptorType = descriptorType;
-    wds.dstBinding = dstBinding;
-    wds.descriptorCount = 1;
-    wds.pBufferInfo = pDescBuffInfo;
-    return wds;
-}
-VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorImageInfo* pDescImgInfo)
-{
-    VkWriteDescriptorSet wds = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-    wds.dstSet = dstSet;
-    wds.descriptorType = descriptorType;
-    wds.dstBinding = dstBinding;
-    wds.descriptorCount = 1;
-    wds.pImageInfo = pDescImgInfo;
-    return wds;
-}
-
 vkPbrRenderer::vkPbrRenderer()
 {
 
@@ -88,6 +19,9 @@ vkPbrRenderer::~vkPbrRenderer() {
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
     vkDestroyDescriptorSetLayout(device, descriptorSetLayouts.scene, nullptr);
     vkDestroyDescriptorSetLayout(device, descriptorSetLayouts.material, nullptr);
+
+    for (int i=0; i<swapChain.imageCount; i++)
+        vulkanDevice->destroyFence (fences[i]);
 
     models.object.destroy();
     models.skybox.destroy();
@@ -114,8 +48,7 @@ void vkPbrRenderer::renderPrimitive(vkglTF::Primitive &primitive, VkCommandBuffe
 
 void vkPbrRenderer::buildCommandBuffers()
 {
-    VkCommandBufferBeginInfo cmdBufferBeginInfo{};
-    cmdBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    VkCommandBufferBeginInfo cmdBufferBeginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 
     VkClearValue clearValues[3];
     if (settings.multiSampling) {
@@ -128,8 +61,7 @@ void vkPbrRenderer::buildCommandBuffers()
         clearValues[1].depthStencil = { 1.0f, 0 };
     }
 
-    VkRenderPassBeginInfo renderPassBeginInfo{};
-    renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    VkRenderPassBeginInfo renderPassBeginInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
     renderPassBeginInfo.renderPass = renderPass;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
@@ -154,8 +86,6 @@ void vkPbrRenderer::buildCommandBuffers()
         VkRect2D scissor{};
         scissor.extent = { width, height };
         vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
-
-        VkDeviceSize offsets[1] = { 0 };
 
         vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.skybox, 0, NULL);
         vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
@@ -1319,6 +1249,18 @@ void vkPbrRenderer::prepare()
 {
     VulkanExampleBase::prepare();
 
+    fences.resize(swapChain.imageCount);
+    for (int i=0; i<swapChain.imageCount; i++)
+        fences[i] = vulkanDevice->createFence(true);
+
+    drawComplete= vulkanDevice->createSemaphore();
+
+    submitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    submitInfo.pWaitDstStageMask = &stageFlags;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pSignalSemaphores = &drawComplete;
+
     loadAssets();
 
     models.object.buildInstanceBuffer();
@@ -1333,34 +1275,17 @@ void vkPbrRenderer::prepare()
     prepared = true;
 }
 
-void vkPbrRenderer::render()
-{
-    if (!prepared) {
+void vkPbrRenderer::submit (VkQueue queue, uint32_t bufferindex, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount) {
+    if (!prepared)
         return;
-    }
-    VulkanExampleBase::prepareFrame();
-    VK_CHECK_RESULT(vkWaitForFences(device, 1, &waitFences[currentBuffer], VK_TRUE, UINT64_MAX));
-    VK_CHECK_RESULT(vkResetFences(device, 1, &waitFences[currentBuffer]));
-    const VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.pWaitDstStageMask = &waitDstStageMask;
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &presentCompleteSemaphore;
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &renderCompleteSemaphore;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];
-    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, waitFences[currentBuffer]));
-    VulkanExampleBase::submitFrame();
-    /*if (!paused) {
-        rotation.y += frameTimer * 0.1f;
-        if (rotation.y > 2.0f * (float)M_PI) {
-            rotation.y -= 2.0f * (float)M_PI;
-        }
-        updateUniformBuffers();
-    }*/
+    submitInfo.pCommandBuffers		= &drawCmdBuffers[bufferindex];
+    submitInfo.waitSemaphoreCount	= waitSemaphoreCount;
+    submitInfo.pWaitSemaphores		= waitSemaphore;
 
+    VK_CHECK_RESULT(vkWaitForFences(device, 1, &fences[bufferindex], VK_TRUE, UINT64_MAX));
+    VK_CHECK_RESULT(vkResetFences(device, 1, &fences[bufferindex]));
+
+    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fences[bufferindex]));
 }
 
 void vkPbrRenderer::viewChanged()

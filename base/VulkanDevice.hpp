@@ -358,5 +358,25 @@ namespace vks
                 vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
             }
         }
+        VkSemaphore createSemaphore ()
+        {
+            VkSemaphore sema = VK_NULL_HANDLE;
+            VkSemaphoreCreateInfo semaphoreCreateInfo {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+            VK_CHECK_RESULT(vkCreateSemaphore (logicalDevice, &semaphoreCreateInfo, nullptr, &sema));
+            return sema;
+        }
+        VkFence createFence (bool signaled = false) {
+            VkFence fence = VK_NULL_HANDLE;
+            VkFenceCreateInfo fenceCreateInfo {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, VK_NULL_HANDLE,
+                        signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0};
+            VK_CHECK_RESULT(vkCreateFence (logicalDevice, &fenceCreateInfo, nullptr, &fence));
+            return fence;
+        }
+        inline void destroyFence (VkFence fence) {
+            vkDestroyFence (logicalDevice, fence, VK_NULL_HANDLE);
+        }
+        inline void destroySemaphore (VkSemaphore semaphore) {
+            vkDestroySemaphore (logicalDevice, semaphore, VK_NULL_HANDLE);
+        }
     };
 }

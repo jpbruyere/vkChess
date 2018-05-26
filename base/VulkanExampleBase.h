@@ -49,6 +49,11 @@
 #include "VulkanDevice.hpp"
 #include "VulkanSwapChain.hpp"
 
+const std::string getAssetPath();
+VkPipelineShaderStageCreateInfo loadShader(VkDevice device, std::string filename, VkShaderStageFlagBits stage);
+VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorBufferInfo* pDescBuffInfo);
+VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorImageInfo* pDescImgInfo);
+
 class VulkanExampleBase
 {
 private:
@@ -95,8 +100,6 @@ protected:
     VkPipelineCache pipelineCache;
     VulkanSwapChain swapChain;
     VkSemaphore presentCompleteSemaphore;
-    VkSemaphore renderCompleteSemaphore;
-    std::vector<VkFence> waitFences;
     std::string title = "Vulkan Example";
     std::string name = "vulkanExample";
 public:
@@ -248,7 +251,6 @@ public:
     void destroyCommandBuffers();
 
     void renderLoop();
-    void renderFrame();
     void prepareFrame();
-    void submitFrame();
+    void renderFrame();
 };

@@ -26,6 +26,8 @@
 #include <errno.h>
 
 #include "vkpbrrenderer.h"
+#include "vkrenderer.h"
+
 #include <glm/gtx/spline.hpp>
 
 #define GLM_DEPTH_CLIP_SPACE = GLM_DEPTH_NEGATIVE_ONE_TO_ONE
@@ -56,6 +58,8 @@ public:
         uint32_t uboIdx;
         std::queue<glm::mat4> queue;
     };
+
+    vkRenderer* debugRenderer = nullptr;
 
     VulkanExample() : vkPbrRenderer()
     {
@@ -453,6 +457,14 @@ public:
     virtual void prepare() {
         vkPbrRenderer::prepare();
 
+        debugRenderer = new vkRenderer (vulkanDevice, swapChain, depthFormat, settings.sampleCount,
+                                                        frameBuffers, &uniformBuffers.matrices);
+
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,1,0), glm::vec3(0,1,0));
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,0,1), glm::vec3(0,0,1));
+        debugRenderer->flush();
+
         startStockFish();
 
         if (getStockFishIsReady())
@@ -497,7 +509,16 @@ public:
     }*/
 
     void render () {
-        vkPbrRenderer::render();
+        if (!prepared)
+            return;
+
+        prepareFrame();
+
+        this->submit(queue, currentBuffer, &presentCompleteSemaphore, 1);
+
+        debugRenderer->submit(queue, currentBuffer, &this->drawComplete, 1);
+
+        VK_CHECK_RESULT(swapChain.queuePresent(queue, currentBuffer, debugRenderer->drawComplete));
 
         update();
     }

@@ -7,6 +7,91 @@
 */
 
 #include "VulkanExampleBase.h"
+#include <fstream>
+
+#if !(defined(VK_USE_PLATFORM_IOS_MVK) || defined(VK_USE_PLATFORM_MACOS_MVK))
+const std::string getAssetPath()
+{
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
+    return "";
+#elif defined(VK_EXAMPLE_DATA_DIR)
+    return VK_EXAMPLE_DATA_DIR;
+#else
+    return "./../data/";
+#endif
+}
+#endif
+
+VkPipelineShaderStageCreateInfo loadShader(VkDevice device, std::string filename, VkShaderStageFlagBits stage)
+{
+    VkPipelineShaderStageCreateInfo shaderStage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO};
+    shaderStage.stage = stage;
+    shaderStage.pName = "main";
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
+    std::string assetpath = "shaders/" + filename;
+    AAsset* asset = AAssetManager_open(androidApp->activity->assetManager, assetpath.c_str(), AASSET_MODE_STREAMING);
+    assert(asset);
+    size_t size = AAsset_getLength(asset);
+    assert(size > 0);
+    char *shaderCode = new char[size];
+    AAsset_read(asset, shaderCode, size);
+    AAsset_close(asset);
+    VkShaderModule shaderModule;
+    VkShaderModuleCreateInfo moduleCreateInfo;
+    moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    moduleCreateInfo.pNext = NULL;
+    moduleCreateInfo.codeSize = size;
+    moduleCreateInfo.pCode = (uint32_t*)shaderCode;
+    moduleCreateInfo.flags = 0;
+    VK_CHECK_RESULT(vkCreateShaderModule(device, &moduleCreateInfo, NULL, &shaderStage.module));
+    delete[] shaderCode;
+#else
+    std::ifstream is("./../data/shaders/" + filename, std::ios::binary | std::ios::in | std::ios::ate);
+
+    if (is.is_open()) {
+        size_t size = is.tellg();
+        is.seekg(0, std::ios::beg);
+        char* shaderCode = new char[size];
+        is.read(shaderCode, size);
+        is.close();
+        assert(size > 0);
+        VkShaderModuleCreateInfo moduleCreateInfo{};
+        moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        moduleCreateInfo.codeSize = size;
+        moduleCreateInfo.pCode = (uint32_t*)shaderCode;
+        vkCreateShaderModule(device, &moduleCreateInfo, NULL, &shaderStage.module);
+        delete[] shaderCode;
+    }
+    else {
+        std::cerr << "Error: Could not open shader file \"" << filename << "\"" << std::endl;
+        shaderStage.module = VK_NULL_HANDLE;
+    }
+
+#endif
+    assert(shaderStage.module != VK_NULL_HANDLE);
+    return shaderStage;
+}
+
+VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorBufferInfo* pDescBuffInfo)
+{
+    VkWriteDescriptorSet wds = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    wds.dstSet = dstSet;
+    wds.descriptorType = descriptorType;
+    wds.dstBinding = dstBinding;
+    wds.descriptorCount = 1;
+    wds.pBufferInfo = pDescBuffInfo;
+    return wds;
+}
+VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorImageInfo* pDescImgInfo)
+{
+    VkWriteDescriptorSet wds = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    wds.dstSet = dstSet;
+    wds.descriptorType = descriptorType;
+    wds.dstBinding = dstBinding;
+    wds.descriptorCount = 1;
+    wds.pImageInfo = pDescImgInfo;
+    return wds;
+}
 
 std::vector<const char*> VulkanExampleBase::args;
 
@@ -135,13 +220,6 @@ void VulkanExampleBase::prepare()
     */
     VkSemaphoreCreateInfo semaphoreCI = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     VK_CHECK_RESULT(vkCreateSemaphore(device, &semaphoreCI, nullptr, &presentCompleteSemaphore));
-    VK_CHECK_RESULT(vkCreateSemaphore(device, &semaphoreCI, nullptr, &renderCompleteSemaphore));
-    VkFenceCreateInfo fenceCreateInfo = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
-    fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-    waitFences.resize(swapChain.imageCount);
-    for (auto& fence : waitFences) {
-        VK_CHECK_RESULT(vkCreateFence(device, &fenceCreateInfo, nullptr, &fence));
-    }
 
     /*
         Command pool
@@ -595,11 +673,6 @@ void VulkanExampleBase::prepareFrame()
     }
 }
 
-void VulkanExampleBase::submitFrame()
-{
-    VK_CHECK_RESULT(swapChain.queuePresent(queue, currentBuffer, renderCompleteSemaphore));
-}
-
 VulkanExampleBase::VulkanExampleBase()
 {
     char* numConvPtr;
@@ -663,10 +736,7 @@ VulkanExampleBase::~VulkanExampleBase()
     vkDestroyPipelineCache(device, pipelineCache, nullptr);
     vkDestroyCommandPool(device, cmdPool, nullptr);
     vkDestroySemaphore(device, presentCompleteSemaphore, nullptr);
-    vkDestroySemaphore(device, renderCompleteSemaphore, nullptr);
-    for (auto& fence : waitFences) {
-        vkDestroyFence(device, fence, nullptr);
-    }
+
     if (settings.multiSampling) {
         vkDestroyImage(device, multisampleTarget.color.image, nullptr);
         vkDestroyImageView(device, multisampleTarget.color.view, nullptr);
