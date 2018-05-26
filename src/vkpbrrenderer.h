@@ -70,7 +70,6 @@ public:
 	vkPbrRenderer();
 	~vkPbrRenderer();
 
-	void prepare();
 	void prepareUniformBuffers();
 	void updateUniformBuffers();
 	void updateParams();
@@ -83,6 +82,7 @@ public:
 
 	void renderPrimitive(vkglTF::Primitive &primitive, VkCommandBuffer commandBuffer);
 
+	virtual void prepare();
 	virtual void loadAssets();
 	virtual void buildCommandBuffers();
 	virtual void render();

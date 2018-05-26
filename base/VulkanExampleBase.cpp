@@ -1692,7 +1692,9 @@ void VulkanExampleBase::handleEvent(const xcb_generic_event_t *event)
 
 void VulkanExampleBase::viewChanged() {}
 
-void VulkanExampleBase::keyPressed(uint32_t) {}
+void VulkanExampleBase::keyPressed(uint32_t) {
+
+}
 
 void VulkanExampleBase::buildCommandBuffers() {}
 

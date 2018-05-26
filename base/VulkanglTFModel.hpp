@@ -837,7 +837,7 @@ namespace vkglTF
             instanceDatas.push_back(id);
             return idx;
         }
-        uint32_t addInstance(std::string name, const glm::mat4& modelMat) {
+        uint32_t addInstance(const std::string& name, const glm::mat4& modelMat) {
             for (int i=0; i<primitives.size(); i++) {
                 if (name != primitives[i].name)
                     continue;
