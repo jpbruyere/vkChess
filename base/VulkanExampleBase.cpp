@@ -1601,12 +1601,25 @@ void VulkanExampleBase::handleEvent(const xcb_generic_event_t *event)
     case XCB_BUTTON_PRESS:
     {
         xcb_button_press_event_t *press = (xcb_button_press_event_t *)event;
-        if (press->detail == XCB_BUTTON_INDEX_1)
+        switch (press->detail) {
+        case XCB_BUTTON_INDEX_1:
             mouseButtons.left = true;
-        if (press->detail == XCB_BUTTON_INDEX_2)
+            break;
+        case XCB_BUTTON_INDEX_2:
             mouseButtons.middle = true;
-        if (press->detail == XCB_BUTTON_INDEX_3)
+            break;
+        case XCB_BUTTON_INDEX_3:
             mouseButtons.right = true;
+            break;
+        case XCB_BUTTON_INDEX_4://wheel scroll up
+            camera.translate(glm::vec3(0.0f, 0.0f, camera.zoomSpeed));
+            viewUpdated = true;
+            break;
+        case XCB_BUTTON_INDEX_5://wheel scroll down
+            camera.translate(glm::vec3(0.0f, 0.0f, -camera.zoomSpeed));
+            viewUpdated = true;
+            break;
+        }
     }
     break;
     case XCB_BUTTON_RELEASE:
@@ -1913,12 +1926,13 @@ void VulkanExampleBase::handleMouseMove(int32_t x, int32_t y)
         return;
     }
 
-    if (mouseButtons.left) {
+    /*if (mouseButtons.left) {
         camera.rotate(glm::vec3(dy * camera.rotationSpeed, -dx * camera.rotationSpeed, 0.0f));
         viewUpdated = true;
-    }
+    }*/
     if (mouseButtons.right) {
-        camera.translate(glm::vec3(-0.0f, 0.0f, dy * .005f * camera.movementSpeed));
+        //camera.translate(glm::vec3(-0.0f, 0.0f, dy * .005f * camera.movementSpeed));
+        camera.rotate(glm::vec3(-dy * camera.rotationSpeed, -dx * camera.rotationSpeed, 0.0f));
         viewUpdated = true;
     }
     if (mouseButtons.middle) {

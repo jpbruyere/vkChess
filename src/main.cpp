@@ -62,10 +62,10 @@ public:
         title = "Vulkan glTf 2.0 PBR";
         camera.type = Camera::CameraType::firstperson;
         camera.movementSpeed = 8.0f;
-        camera.setPerspective(60.0f, (float)width / (float)height, 0.1f, 256.0f);
+        camera.setPerspective(80.0f, (float)width / (float)height, 0.1f, 50.0f);
         camera.rotationSpeed = 0.25f;
-        camera.setRotation({ -32.0f, 0.0f, 0.0f });
-        camera.setPosition({ .05f, 6.31f, -10.85f });
+        camera.setRotation({ 32.0f, 0.0f, 0.0f });
+        camera.setPosition({ .05f, -6.31f, -10.85f });
     }
 
     ~VulkanExample()
@@ -134,7 +134,7 @@ public:
     }
 
     void animatePce (uint32_t pceIdx, float x, float y) {
-        glm::vec3 vUp = glm::vec3(0.f,3.f,0.f);
+        glm::vec3 vUp = glm::vec3(0.f,-3.f,0.f);
         glm::vec3 start = glm::vec3(models.object.instanceDatas[pceIdx].modelMat[3]);
         glm::vec3 end   = glm::vec3(x*2 - 7, 0.f, 7 - y*2);
 
