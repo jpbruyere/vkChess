@@ -95,7 +95,6 @@ protected:
     std::vector<VkCommandBuffer> drawCmdBuffers;
     VkRenderPass renderPass;
     std::vector<VkFramebuffer>frameBuffers;
-    uint32_t currentBuffer = 0;
     VkDescriptorPool descriptorPool;
     VkPipelineCache pipelineCache;
     VulkanSwapChain swapChain;
@@ -241,6 +240,8 @@ public:
     virtual void viewChanged();
     virtual void keyPressed(uint32_t);
     virtual void handleMouseMove(int32_t x, int32_t y);
+    virtual void handleMouseButtonDown(int buttonIndex);
+    virtual void handleMouseButtonUp(int buttonIndex);
     virtual void buildCommandBuffers();
     virtual void setupFrameBuffer();
     virtual void prepare();

@@ -665,7 +665,7 @@ void VulkanExampleBase::renderLoop()
 
 void VulkanExampleBase::prepareFrame()
 {
-    VkResult err = swapChain.acquireNextImage(presentCompleteSemaphore, &currentBuffer);
+    VkResult err = swapChain.acquireNextImage(presentCompleteSemaphore);
     if ((err == VK_ERROR_OUT_OF_DATE_KHR) || (err == VK_SUBOPTIMAL_KHR)) {
         windowResize();
     } else {
@@ -1690,6 +1690,7 @@ void VulkanExampleBase::handleEvent(const xcb_generic_event_t *event)
             viewUpdated = true;
             break;
         }
+        handleMouseButtonDown(press->detail);
     }
     break;
     case XCB_BUTTON_RELEASE:
@@ -1701,6 +1702,7 @@ void VulkanExampleBase::handleEvent(const xcb_generic_event_t *event)
             mouseButtons.middle = false;
         if (press->detail == XCB_BUTTON_INDEX_3)
             mouseButtons.right = false;
+        handleMouseButtonUp(press->detail);
     }
     break;
     case XCB_KEY_PRESS:
@@ -1775,9 +1777,7 @@ void VulkanExampleBase::handleEvent(const xcb_generic_event_t *event)
 
 void VulkanExampleBase::viewChanged() {}
 
-void VulkanExampleBase::keyPressed(uint32_t) {
-
-}
+void VulkanExampleBase::keyPressed(uint32_t) {}
 
 void VulkanExampleBase::buildCommandBuffers() {}
 
@@ -2011,6 +2011,10 @@ void VulkanExampleBase::handleMouseMove(int32_t x, int32_t y)
     }
     mousePos = glm::vec2((float)x, (float)y);
 }
+
+void VulkanExampleBase::handleMouseButtonDown(int buttonIndex) {}
+
+void VulkanExampleBase::handleMouseButtonUp(int buttonIndex) {}
 
 void VulkanExampleBase::initSwapchain()
 {

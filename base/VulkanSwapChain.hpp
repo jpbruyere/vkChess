@@ -54,6 +54,7 @@ public:
     uint32_t imageCount;
     std::vector<VkImage> images;
     std::vector<SwapChainBuffer> buffers;
+    uint32_t currentBuffer = 0;
     /** @brief Queue family index of the detected graphics and presenting device queue */
     uint32_t queueNodeIndex = UINT32_MAX;
 
@@ -437,11 +438,11 @@ public:
     *
     * @return VkResult of the image acquisition
     */
-    VkResult acquireNextImage(VkSemaphore presentCompleteSemaphore, uint32_t *imageIndex)
+    VkResult acquireNextImage(VkSemaphore presentCompleteSemaphore)
     {
         // By setting timeout to UINT64_MAX we will always wait until the next image has been acquired or an actual error is thrown
         // With that we don't have to handle VK_NOT_READY
-        return fpAcquireNextImageKHR(device, swapChain, UINT64_MAX, presentCompleteSemaphore, (VkFence)nullptr, imageIndex);
+        return fpAcquireNextImageKHR(device, swapChain, UINT64_MAX, presentCompleteSemaphore, (VkFence)nullptr, &currentBuffer);
     }
 
     /**
@@ -453,14 +454,13 @@ public:
     *
     * @return VkResult of the queue presentation
     */
-    VkResult queuePresent(VkQueue queue, uint32_t imageIndex, VkSemaphore waitSemaphore = VK_NULL_HANDLE)
+    VkResult queuePresent(VkQueue queue, VkSemaphore waitSemaphore = VK_NULL_HANDLE)
     {
-        VkPresentInfoKHR presentInfo = {};
-        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        VkPresentInfoKHR presentInfo = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
         presentInfo.pNext = NULL;
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = &swapChain;
-        presentInfo.pImageIndices = &imageIndex;
+        presentInfo.pImageIndices = &currentBuffer;
         // Check if a wait semaphore has been specified to wait for before presenting the image
         if (waitSemaphore != VK_NULL_HANDLE)
         {

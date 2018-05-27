@@ -8,7 +8,7 @@ class vkRenderer
 	VkSampleCountFlagBits       sampleCount;
 
 	vks::VulkanDevice*          device;
-	VulkanSwapChain             swapChain;
+	VulkanSwapChain*            swapChain;
 	VkRenderPass                renderPass;
 	std::vector<VkFramebuffer>  frameBuffers;
 	vks::Buffer*                uboMatrices;
@@ -44,14 +44,14 @@ public:
 	uint32_t			vertexCount = 0;
 	uint32_t			sdffVertexCount = 0;
 
-	vkRenderer (vks::VulkanDevice* _device, VulkanSwapChain _swapChain, VkFormat depthFormat,
+	vkRenderer (vks::VulkanDevice* _device, VulkanSwapChain* _swapChain, VkFormat depthFormat,
 					VkSampleCountFlagBits _sampleCount, std::vector<VkFramebuffer> &_frameBuffers,
 					vks::Buffer *_uboMatrices);
 	virtual ~vkRenderer();
 
 	virtual void buildCommandBuffer ();
 	virtual void prepare();
-	void submit (VkQueue queue, uint32_t bufferindex, VkSemaphore *waitSemaphore, uint32_t waitSemaphoreCount);
+	void submit (VkQueue queue, VkSemaphore *waitSemaphore, uint32_t waitSemaphoreCount);
 
 	void drawLine(const glm::vec3& from,const glm::vec3& to,const glm::vec3& fromColor, const glm::vec3& toColor);
 	void drawLine(const glm::vec3& from,const glm::vec3& to,const glm::vec3& color);

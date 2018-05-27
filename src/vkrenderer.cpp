@@ -2,7 +2,7 @@
 
 const VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-vkRenderer::vkRenderer(vks::VulkanDevice* _device, VulkanSwapChain _swapChain,
+vkRenderer::vkRenderer(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
                        VkFormat depthFormat, VkSampleCountFlagBits _sampleCount,
                        std::vector<VkFramebuffer>&_frameBuffers, vks::Buffer* _uboMatrices)
 {
@@ -25,7 +25,7 @@ vkRenderer::~vkRenderer()
     vkDestroyPipeline       (device->logicalDevice, pipeline, VK_NULL_HANDLE);
     vkDestroyPipelineLayout (device->logicalDevice, pipelineLayout, VK_NULL_HANDLE);
 
-    for (int i=0; i<swapChain.imageCount; i++)
+    for (int i=0; i<swapChain->imageCount; i++)
         device->destroyFence (fences[i]);
 
     device->destroySemaphore    (drawComplete);
@@ -33,8 +33,8 @@ vkRenderer::~vkRenderer()
 void vkRenderer::prepare() {
     prepareRenderPass();
 
-    fences.resize(swapChain.imageCount);
-    for (int i=0; i<swapChain.imageCount; i++)
+    fences.resize(swapChain->imageCount);
+    for (int i=0; i<swapChain->imageCount; i++)
         fences[i] = device->createFence(true);
 
     drawComplete= device->createSemaphore();
@@ -52,12 +52,12 @@ void vkRenderer::prepare() {
     cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     VK_CHECK_RESULT(vkCreateCommandPool(device->logicalDevice, &cmdPoolInfo, nullptr, &commandPool));
 
-    cmdBuffers.resize(swapChain.imageCount);
+    cmdBuffers.resize(swapChain->imageCount);
 
     VkCommandBufferAllocateInfo cmdBufAllocateInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
     cmdBufAllocateInfo.commandPool = commandPool;
     cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cmdBufAllocateInfo.commandBufferCount = swapChain.imageCount;
+    cmdBufAllocateInfo.commandBufferCount = swapChain->imageCount;
     VK_CHECK_RESULT(vkAllocateCommandBuffers(device->logicalDevice, &cmdBufAllocateInfo, cmdBuffers.data()));
 
     prepareDescriptors();
@@ -80,7 +80,7 @@ void vkRenderer::prepareRenderPass()
         std::array<VkAttachmentDescription, 4> attachments = {};
 
         // Multisampled attachment that we render to
-        attachments[0].format = swapChain.colorFormat;
+        attachments[0].format = swapChain->colorFormat;
         attachments[0].samples = sampleCount;
         attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
         attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -91,7 +91,7 @@ void vkRenderer::prepareRenderPass()
 
         // This is the frame buffer attachment to where the multisampled image
         // will be resolved to and which will be presented to the swapchain
-        attachments[1].format = swapChain.colorFormat;
+        attachments[1].format = swapChain->colorFormat;
         attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
         attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -103,9 +103,9 @@ void vkRenderer::prepareRenderPass()
         // Multisampled depth attachment we render to
         attachments[2].format = depthFormat;
         attachments[2].samples = sampleCount;
-        attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attachments[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attachments[2].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -172,7 +172,7 @@ void vkRenderer::prepareRenderPass()
     else {
         std::array<VkAttachmentDescription, 2> attachments = {};
         // Color attachment
-        attachments[0].format = swapChain.colorFormat;
+        attachments[0].format = swapChain->colorFormat;
         attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
         attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
         attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -280,17 +280,18 @@ void vkRenderer::preparePipeline()
     rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizationStateCI.cullMode = VK_CULL_MODE_NONE;
     rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rasterizationStateCI.lineWidth = 2.0f;
+    rasterizationStateCI.lineWidth = 5.0f;
 
     VkPipelineColorBlendAttachmentState blendAttachmentState = {};
     blendAttachmentState.blendEnable = VK_TRUE;
-    blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    blendAttachmentState.blendEnable = VK_TRUE;
+    blendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
     blendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     blendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
-    blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
     blendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
-    blendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
     VkPipelineColorBlendStateCreateInfo colorBlendStateCI = {VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
     colorBlendStateCI.attachmentCount = 1;
@@ -309,7 +310,7 @@ void vkRenderer::preparePipeline()
 
     VkPipelineMultisampleStateCreateInfo multisampleStateCI = {VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
 
-    if (sampleCount>VK_SAMPLE_COUNT_1_BIT)
+    if (sampleCount > VK_SAMPLE_COUNT_1_BIT)
         multisampleStateCI.rasterizationSamples = sampleCount;
 
     std::vector<VkDynamicState> dynamicStateEnables = {
@@ -375,11 +376,24 @@ void vkRenderer::buildCommandBuffer (){
 
     VkCommandBufferBeginInfo cmdBufInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 
+    VkClearValue clearValues[3];
+    if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+        clearValues[0].color = { { 1.0f, 1.0f, 1.0f, 1.0f } };
+        clearValues[1].color = { { 1.0f, 1.0f, 1.0f, 1.0f } };
+        clearValues[2].depthStencil = { 1.0f, 0 };
+    }
+    else {
+        clearValues[0].color = { { 0.1f, 0.1f, 0.1f, 1.0f } };
+        clearValues[1].depthStencil = { 1.0f, 0 };
+    }
+
     VkRenderPassBeginInfo renderPassBeginInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
     renderPassBeginInfo.renderPass = renderPass;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
-    renderPassBeginInfo.renderArea.extent = swapChain.swapchainExtent;
+    renderPassBeginInfo.renderArea.extent = swapChain->swapchainExtent;
+    renderPassBeginInfo.clearValueCount = (sampleCount > VK_SAMPLE_COUNT_1_BIT) ? 3 : 2;
+    renderPassBeginInfo.pClearValues = clearValues;
 
     for (size_t i = 0; i < cmdBuffers.size(); ++i)
     {
@@ -389,14 +403,14 @@ void vkRenderer::buildCommandBuffer (){
         vkCmdBeginRenderPass(cmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         VkViewport viewport{};
-        viewport.width = (float)swapChain.swapchainExtent.width;
-        viewport.height = (float)swapChain.swapchainExtent.height;
+        viewport.width = (float)swapChain->swapchainExtent.width;
+        viewport.height = (float)swapChain->swapchainExtent.height;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(cmdBuffers[i], 0, 1, &viewport);
 
         VkRect2D scissor{};
-        scissor.extent = { swapChain.swapchainExtent.width, swapChain.swapchainExtent.height};
+        scissor.extent = { swapChain->swapchainExtent.width, swapChain->swapchainExtent.height};
         vkCmdSetScissor(cmdBuffers[i], 0, 1, &scissor);
 
         VkDeviceSize offsets[1] = { 0 };
@@ -413,17 +427,17 @@ void vkRenderer::buildCommandBuffer (){
     prepared = true;
 }
 
-void vkRenderer::submit (VkQueue queue, uint32_t bufferindex, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount) {
+void vkRenderer::submit (VkQueue queue, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount) {
     if (!prepared || vertexCount == 0)
         return;
-    submitInfo.pCommandBuffers		= &cmdBuffers[bufferindex];
+    submitInfo.pCommandBuffers		= &cmdBuffers[swapChain->currentBuffer];
     submitInfo.waitSemaphoreCount	= waitSemaphoreCount;
     submitInfo.pWaitSemaphores		= waitSemaphore;
 
-    VK_CHECK_RESULT(vkWaitForFences(device->logicalDevice, 1, &fences[bufferindex], VK_TRUE, UINT64_MAX));
-    VK_CHECK_RESULT(vkResetFences(device->logicalDevice, 1, &fences[bufferindex]));
+    VK_CHECK_RESULT(vkWaitForFences(device->logicalDevice, 1, &fences[swapChain->currentBuffer], VK_TRUE, UINT64_MAX));
+    VK_CHECK_RESULT(vkResetFences(device->logicalDevice, 1, &fences[swapChain->currentBuffer]));
 
-    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fences[bufferindex]));
+    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fences[swapChain->currentBuffer]));
 }
 void vkRenderer::clear(){
     vertices.clear();

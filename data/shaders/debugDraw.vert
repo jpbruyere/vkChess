@@ -12,7 +12,6 @@ layout (binding = 0) uniform UBO
 	mat4 model;
 	mat4 view;
 	vec3 camPos;
-	float flipUV;
 } ubo;
 
 layout (location = 0) out vec3 outColor;

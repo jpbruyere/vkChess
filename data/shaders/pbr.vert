@@ -16,7 +16,6 @@ layout (binding = 0) uniform UBO
 	mat4 model;
 	mat4 view;
 	vec3 camPos;
-	float flipUV;
 } ubo;
 
 layout (location = 0) out vec3 outWorldPos;
@@ -35,9 +34,7 @@ void main()
 	outWorldPos = locPos;
 	outNormal = mat3(inModel) * inNormal;
 	outUV = inUV;
-	if (ubo.flipUV == 1.0) {
-		outUV.t = 1.0 - inUV.t;
-	}
+	outUV.t = 1.0 - inUV.t;
 	outMatId = inMatId;
 	gl_Position =  ubo.projection * ubo.view * vec4(outWorldPos, 1.0);
 }

@@ -76,13 +76,22 @@ public:
         return zfar;
     }
 
+    glm::vec3 getViewDirection () {
+        glm::vec3 camFront;
+        camFront.x = -cos(glm::radians(rotation.x)) * sin(glm::radians(rotation.y));
+        camFront.y = sin(glm::radians(rotation.x));
+        camFront.z = cos(glm::radians(rotation.x)) * cos(glm::radians(rotation.y));
+        camFront = glm::normalize(camFront);
+        return camFront;
+    }
+
     void setPerspective(float fov, float aspect, float znear, float zfar)
     {
         this->fov = fov;
         this->znear = znear;
         this->zfar = zfar;
         matrices.perspective = glm::perspective(glm::radians(fov), aspect, znear, zfar);
-    };
+    }
 
     void updateAspectRatio(float aspect)
     {
@@ -99,7 +108,7 @@ public:
     {
         this->rotation = rotation;
         updateViewMatrix();
-    };
+    }
 
     void rotate(glm::vec3 delta)
     {
@@ -111,7 +120,7 @@ public:
     {
         this->position = translation;
         updateViewMatrix();
-    };
+    }
 
     void translate(glm::vec3 delta)
     {
@@ -145,7 +154,7 @@ public:
                 updateViewMatrix();
             }
         }
-    };
+    }
 
     // Update camera passing separate axis data (gamepad)
     // Returns true if view or position has been changed

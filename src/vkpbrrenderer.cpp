@@ -1275,17 +1275,17 @@ void vkPbrRenderer::prepare()
     prepared = true;
 }
 
-void vkPbrRenderer::submit (VkQueue queue, uint32_t bufferindex, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount) {
+void vkPbrRenderer::submit (VkQueue queue, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount) {
     if (!prepared)
         return;
-    submitInfo.pCommandBuffers		= &drawCmdBuffers[bufferindex];
+    submitInfo.pCommandBuffers		= &drawCmdBuffers[swapChain.currentBuffer];
     submitInfo.waitSemaphoreCount	= waitSemaphoreCount;
     submitInfo.pWaitSemaphores		= waitSemaphore;
 
-    VK_CHECK_RESULT(vkWaitForFences(device, 1, &fences[bufferindex], VK_TRUE, UINT64_MAX));
-    VK_CHECK_RESULT(vkResetFences(device, 1, &fences[bufferindex]));
+    VK_CHECK_RESULT(vkWaitForFences(device, 1, &fences[swapChain.currentBuffer], VK_TRUE, UINT64_MAX));
+    VK_CHECK_RESULT(vkResetFences(device, 1, &fences[swapChain.currentBuffer]));
 
-    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fences[bufferindex]));
+    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fences[swapChain.currentBuffer]));
 }
 
 void vkPbrRenderer::viewChanged()

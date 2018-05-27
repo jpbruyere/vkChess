@@ -40,7 +40,6 @@ public:
         glm::mat4 model;
         glm::mat4 view;
         glm::vec3 camPos;
-        float flipUV = 1.0f;
     } uboMatrices;
 
     struct UBOParams {
@@ -86,7 +85,7 @@ public:
 
     void renderPrimitive(vkglTF::Primitive &primitive, VkCommandBuffer commandBuffer);
 
-    virtual void submit (VkQueue queue, uint32_t bufferindex, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount);
+    virtual void submit (VkQueue queue, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount);
     virtual void prepare();
     virtual void loadAssets();
     virtual void buildCommandBuffers();

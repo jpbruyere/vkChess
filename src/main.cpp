@@ -79,18 +79,20 @@ public:
 
     Color currentPlayer = White;
     bool gameStarted = false;
-    bool playerIsAi[2] = {true,true};
+    bool playerIsAi[2] = {false,true};
     Piece pieces[32];
 
     int cptWhiteOut = 0;
     int cptBlackOut = 0;
 
     const int animSteps = 100;
-    std::list <animation> animations;
+    std::vector <animation> animations;
 
     glm::ivec2 bestMoveOrig;
     glm::ivec2 bestMoveTarget;
 
+    glm::ivec2 hoverSquare = glm::ivec2(-1,-1);
+    glm::ivec2 selectedSquare = glm::ivec2(-1,-1);
 
     //stockfish
     bool stockFishIsReady = false;
@@ -111,16 +113,17 @@ public:
     void update(){
         readStockfishLine();
 
-        if (!animations.empty()){
-            for (std::list<animation>::iterator itr = animations.begin(); itr != animations.end(); ++itr)
-            {
-                if (itr->queue.empty()){
-                    animations.erase(itr++);
-                    continue;
-                }
+        if (animations.empty())
+            return;
+        std::vector<animation>::iterator itr = animations.begin();
+        for ( ; itr != animations.end(); ) {
+            if (itr->queue.empty()) {
+                itr = animations.erase(itr);
+            } else {
                 glm::mat4 a = itr->queue.front();
                 itr->queue.pop();
                 models.object.instanceDatas[itr->uboIdx].modelMat = a;
+                ++itr;
             }
         }
 
@@ -423,12 +426,17 @@ public:
         pIdx++;
     }
 
+    uint32_t selInstanceIdx;
+
     virtual void loadAssets() {
         vkPbrRenderer::loadAssets();
 
         models.object.loadFromFile("/home/jp/gltf/chess/blend.gltf", vulkanDevice, queue, true);
         models.object.addInstance("Plane", glm::translate(glm::mat4(1.0),       glm::vec3( 0,0,0)));
         models.object.addInstance("frame", glm::translate(glm::mat4(1.0),       glm::vec3( 0,0,0)));
+
+        selInstanceIdx = models.object.addInstance("circle", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+
 
         addPiece("white_rook",  Rook, White,    0, 0);
         addPiece("white_knight",Knight, White,  1, 0);
@@ -457,13 +465,8 @@ public:
     virtual void prepare() {
         vkPbrRenderer::prepare();
 
-        debugRenderer = new vkRenderer (vulkanDevice, swapChain, depthFormat, settings.sampleCount,
+        debugRenderer = new vkRenderer (vulkanDevice, &swapChain, depthFormat, settings.sampleCount,
                                                         frameBuffers, &uniformBuffers.matrices);
-
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,1,0), glm::vec3(0,1,0));
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,0,1), glm::vec3(0,0,1));
-        debugRenderer->flush();
 
         startStockFish();
 
@@ -472,41 +475,103 @@ public:
 
         startGame();
     }
+    glm::vec3 vMouse, vMouseN;
 
-    /*virtual void handleMouseMove(int32_t x, int32_t y) {
+    bool UnProject(float winX, float winY, float winZ,
+                   const glm::mat4& modelView, const glm::mat4& projection,
+                   float vpX, float vpY, float vpW, float vpH,
+                   glm::vec3& worldCoordinates)
+    {
+        // Compute (projection x modelView) ^ -1:
+        const glm::mat4 m = glm::inverse(modelView*projection);
+
+        // Need to invert Y since screen Y-origin point down,
+        // while 3D Y-origin points up (this is an OpenGL only requirement):
+        winY = vpH - winY;
+
+        // Transformation of normalized coordinates between -1 and 1:
+        glm::vec4 in;
+        in.x = (winX - vpX) / vpW  * 2.0 - 1.0;
+        in.y = 2.0 * winZ - 1.0;
+        in.z = (winY - vpY) / vpH * 2.0 - 1.0;
+        in.w = 1.0;
+
+        // To world coordinates:
+        glm::vec4 out(in * m);
+        if (out.y == 0.0) // Avoid a division by zero
+        {
+            worldCoordinates = glm::vec3(0);
+            return false;
+        }
+
+        out.y = 1.0 / out.y;
+        worldCoordinates.x = out.x * out.y;
+        worldCoordinates.y = out.y * out.y;
+        worldCoordinates.z = out.z * out.y;
+        return true;
+    }
+
+    void drawDebugTri (glm::vec3 p, glm::vec3 color) {
+        debugRenderer->drawLine(glm::vec3(0,0,0), p, color);
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(p.x,0,p.z), color);
+        debugRenderer->drawLine(p, glm::vec3(p.x,0,p.z), color);
+    }
+    glm::vec3 vResult;
+    virtual void handleMouseButtonDown(int butIndex) {
+        if (butIndex != 1)
+            return;
+
+        debugRenderer->clear();
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,1,0), glm::vec3(0,1,0));
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,0,1), glm::vec3(0,0,1));
+        debugRenderer->flush();
+
+        selectedSquare = hoverSquare;
+
+        Piece* p = getPiece(selectedSquare);
+        if (p){
+            if (p->color == currentPlayer && !playerIsAi[p->color]){
+                models.object.instanceDatas[selInstanceIdx].modelMat =
+                        glm::translate(glm::mat4(1.0), glm::vec3(hoverSquare.x*2 - 7,0.1, 7-hoverSquare.y*2));
+                models.object.updateInstancesBuffer();
+                return;
+            }
+        }
+        models.object.instanceDatas[selInstanceIdx].modelMat =
+                glm::translate(glm::mat4(1.0), glm::vec3(0,-0.1, 0));
+        models.object.updateInstancesBuffer();
+    }
+    virtual void handleMouseMove(int32_t x, int32_t y) {
         VulkanExampleBase::handleMouseMove(x, y);
 
-        glm::vec3 screenPos = glm::vec3(x, 0.0f, y);
-        glm::vec4 viewport = glm::vec4(0.0f, 0.0f, width, height);
-        glm::vec3 vMouse = glm::unProject (screenPos, uboMatrices.view, uboMatrices.projection, viewport);
-        glm::vec3 vEye = glm::normalize(-camera.position);
+        vMouse = glm::unProject(glm::vec3(mousePos.x, mousePos.y, 0.0), uboMatrices.view, uboMatrices.projection,
+                                  glm::vec4(0,0,width,height));
 
-        glm::vec3 vMouseN = glm::normalize(vMouse);
+        glm::vec3 vEye = -camera.position;
 
-        glm::vec3 vMouseRay = glm::normalize (vEye-vMouse);
-        float a = vEye.y / vMouseRay.y;
-        vMouse = vEye - vMouseRay * a;
+        glm::vec3 vMouseRay = //vEye - vMouse;
+                glm::normalize(vEye - vMouse);//- vMouseEnd);
 
-        glm::ivec2 newPos = glm::ivec2 ((int)vMouse.x, (int)vMouse.z);
-        //glm::ivec2 ((int)round(vMouse.x*2 - 7), (int)round(7 - vMouse.z*2));
+        float t = vMouse.y/vMouseRay.y;
 
-//        if (newPos.x<0||newPos.y<0||newPos.x>7||newPos.y>7){
-//            newPos.x = -1;
-//            newPos.y = -1;
-//        }
-        printf ("\n\n\n\n\n\n\n\n\n\nnewpos = (%d,%d)\n\n\n\n\n\n\n\n\n\n\n\n\n\n", newPos.x, newPos.y);
-//        if (newPos!=engine->hover){
-//            engine->hover = newPos;
-//            viewChanged();
-//        }
-        Piece* p = getPiece(newPos);
-        if (p) {
-            if (models.object.instanceDatas[p->instance].materialIndex == 6)
-                models.object.instanceDatas[p->instance].materialIndex = 0;
-            else
-                models.object.instanceDatas[p->instance].materialIndex = 6;
+        glm::vec3 hoverPos = vEye - vMouseRay * t;
+
+        glm::ivec2 newPos((int)round(hoverPos.x/2.f + 3.5f), (int)round(3.5f - hoverPos.z / 2.f));
+        hoverPos.x = round(hoverPos.x);
+        hoverPos.z = round(hoverPos.z);
+
+//x*2 - 7,0, 7 - y*2
+        if (newPos.x<0||newPos.y<0||newPos.x>7||newPos.y>7){
+            newPos.x = -1;
+            newPos.y = -1;
         }
-    }*/
+
+        hoverSquare = newPos;
+
+        //std::cout << "HOVER = (" << vR.x << "," << vR.z << ")" <<std::endl <<std::flush;
+        //std::cout << "HOVER = (" << hoverSquare.x << "," << hoverSquare.y << ")" <<std::endl <<std::flush;
+    }
 
     void render () {
         if (!prepared)
@@ -514,11 +579,12 @@ public:
 
         prepareFrame();
 
-        this->submit(queue, currentBuffer, &presentCompleteSemaphore, 1);
+        this->submit(queue, &presentCompleteSemaphore, 1);
+        //debugRenderer->submit(queue,&this->presentCompleteSemaphore, 1);
+        //debugRenderer->submit(queue,&this->drawComplete, 1);
 
-        debugRenderer->submit(queue, currentBuffer, &this->drawComplete, 1);
-
-        VK_CHECK_RESULT(swapChain.queuePresent(queue, currentBuffer, debugRenderer->drawComplete));
+        //VK_CHECK_RESULT(swapChain.queuePresent(queue, debugRenderer->drawComplete));
+        VK_CHECK_RESULT(swapChain.queuePresent(queue, this->drawComplete));
 
         update();
     }
