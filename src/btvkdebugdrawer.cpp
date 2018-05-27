@@ -21,7 +21,8 @@ btVKDebugDrawer::btVKDebugDrawer(vks::VulkanDevice* _device, VulkanSwapChain *_s
 
 btVKDebugDrawer::~btVKDebugDrawer()
 {
-
+    if (prepared)
+        destroy();
 }
 void btVKDebugDrawer::destroy() {
     vkRenderer::destroy();
@@ -73,7 +74,7 @@ void btVKDebugDrawer::preparePipeline () {
     rasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizationStateCI.cullMode = VK_CULL_MODE_NONE;
     rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rasterizationStateCI.lineWidth = 5.0f;
+    rasterizationStateCI.lineWidth = 1.0f;
 
     VkPipelineColorBlendAttachmentState blendAttachmentState = {};
     blendAttachmentState.blendEnable = VK_TRUE;
@@ -171,7 +172,7 @@ void btVKDebugDrawer::preparePipeline () {
     };
 
     shaderStages[0] = loadShader(device->logicalDevice, "sdf.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
-    shaderStages[1] = loadShader(device->logicalDevice, "sdf.vert.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+    shaderStages[1] = loadShader(device->logicalDevice, "sdf.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 
     VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->logicalDevice, VK_NULL_HANDLE, 1, &pipelineCI, nullptr, &pipelineSDFF));
 

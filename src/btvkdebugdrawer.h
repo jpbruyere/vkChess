@@ -5,7 +5,7 @@
 #include "texture.hpp"
 #include "LinearMath/btIDebugDraw.h"
 
-class btVKDebugDrawer : public btIDebugDraw, vkRenderer
+class btVKDebugDrawer : public btIDebugDraw, public vkRenderer
 {
 	int m_debugMode;
 

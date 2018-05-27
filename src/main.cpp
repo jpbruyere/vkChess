@@ -33,6 +33,8 @@
 #include <btBulletDynamicsCommon.h>
 #include <BulletCollision/Gimpact/btGImpactCollisionAlgorithm.h>
 
+#include "btvkdebugdrawer.h"
+
 #define GLM_DEPTH_CLIP_SPACE = GLM_DEPTH_NEGATIVE_ONE_TO_ONE
 //GLM_DEPTH_ZERO_TO_ONE
 
@@ -45,7 +47,7 @@
 //target id range from TARG_BDY_ID + targetGroups.size, target index is in userIndex2 of body instance
 #define TARG_BDY_ID 50
 
-#define BT_DEBUG_DRAW 0
+#define BT_DEBUG_DRAW 1
 
 constexpr unsigned int str2int(const char* str, int h = 0)
 {
@@ -289,7 +291,7 @@ class VulkanExample : public vkPbrRenderer
     btDiscreteDynamicsWorld*            dynamicsWorld = nullptr;
 
 #if BT_DEBUG_DRAW
-    vkRenderer* debugRenderer = nullptr;
+    btVKDebugDrawer* debugRenderer = nullptr;
 #endif
 
 public:
@@ -309,6 +311,10 @@ public:
 
     ~VulkanExample()
     {
+#if BT_DEBUG_DRAW
+        debugRenderer->texSDFFont.destroy();
+        delete debugRenderer;
+#endif
         delete dynamicsWorld;
         delete solver;
         delete dispatcher;
@@ -321,13 +327,13 @@ public:
 
         models.object.loadFromFile("./../data/models/pinball.gltf", vulkanDevice, queue, true);
 
-        /*models.object.addInstance("Plane.023", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+        models.object.addInstance("Plane.023", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
         models.object.addInstance("ramp-left", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
         models.object.addInstance("ramp-right", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
         models.object.addInstance("left_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
         models.object.addInstance("right_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
 
-        models.object.addInstance("bumper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));*/
+        models.object.addInstance("bumper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
 
         init_physics();
     }
@@ -335,8 +341,23 @@ public:
         vkPbrRenderer::prepare();
 
 #if BT_DEBUG_DRAW
-        debugRenderer = new vkRenderer (vulkanDevice, &swapChain, depthFormat, settings.sampleCount,
-                                                        frameBuffers, &uniformBuffers.matrices);
+        vks::Texture2D fontTexture;
+        fontTexture.loadFromFile ("./../data/font.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
+
+
+        debugRenderer = new btVKDebugDrawer (vulkanDevice, &swapChain, depthFormat, settings.sampleCount,
+                                                        frameBuffers, &uniformBuffers.matrices,
+                                             "./../data/font.fnt", fontTexture);
+        debugRenderer->setDebugMode(
+                    btIDebugDraw::DBG_DrawConstraintLimits
+                    |btIDebugDraw::DBG_DrawFrames
+                    |btIDebugDraw::DBG_DrawContactPoints
+                    |btIDebugDraw::DBG_DrawConstraints
+                    |btIDebugDraw::DBG_DrawText
+                    |btIDebugDraw::DBG_DrawWireframe
+                    );
+
+        dynamicsWorld->setDebugDrawer (debugRenderer);
 #endif
     }
 
@@ -360,8 +381,34 @@ public:
 
         return body;
     }
+
+    btConvexHullShape* getConvexHullShape (vkglTF::Model& modBodies, uint32_t modelIdx, float scale = 1.0f) {
+        vkglTF::Primitive* mod = &modBodies.primitives[modelIdx];
+        btConvexHullShape* shape  = new btConvexHullShape();
+
+        for (int i = 0 ; i < mod->indexCount ; i++) {
+            glm::vec3 pos = modBodies.vertexBuffer [mod->vertexBase + modBodies.indexBuffer[mod->indexBase + i]].pos;
+            btVector3 v = btVector3(pos.x * scale, pos.y * scale, pos.z * scale);
+            shape->addPoint(v);
+        }
+        shape->optimizeConvexHull();
+        shape->initializePolyhedralFeatures();
+        shape->setMargin(0.001);
+
+        return shape;
+    }
+    btConvexHullShape* getConvexHullShape (vkglTF::Model& modBodies, const std::string& name, float scale = 1.0f) {
+        for (int i=0; i<modBodies.primitives.size(); i++) {
+            if (name != modBodies.primitives[i].name)
+                continue;
+            return getConvexHullShape(modBodies, i, scale);
+        }
+        return nullptr;
+    }
     void initPhysicalBodies () {
-        //vks::ModelGroup* modBodies = new vks::ModelGroup(vulkanDevice, queue);
+        vkglTF::Model modBodies;
+        modBodies.loadFromFile("./../data/models/pinball-lp.gltf", vulkanDevice, queue, false, 1.0f, true);
+
 
         btCollisionShape* shape = nullptr;
         btRigidBody* body = nullptr;
@@ -378,12 +425,13 @@ public:
         shape = new btStaticPlaneShape(upVector, 0);
         shape->setMargin(0.001);
         addRigidBody(shape, 0x02,0x01, 0.1, 0.5);
-/*
-        //static bodies
-        modBodiesIdx = modBodies->addModel(getAssetPath() + "models/pinball-static.obj");
-        for (int i = 0; i<modBodies->models[modBodiesIdx].parts.size() ; i++)
-            addRigidBody (modBodies->getConvexHullShape(modBodiesIdx, i), 0x02,0x01, 0.8, 0.2);
 
+        //static bodies
+        //modBodiesIdx = modBodies->addModel(getAssetPath() + "models/pinball-static.obj");
+        for (int i = 0; i<modBodies.primitives.size() ; i++)
+            addRigidBody (getConvexHullShape (modBodies, i), 0x02,0x01, 0.8, 0.2);
+
+        /*
         //tests
         modBodiesIdx = modBodies->addModel(getAssetPath() + "models/pinball.obj");
         for (int i = 0; i<modBodies->models[modBodiesIdx].parts.size() ; i++)
@@ -625,22 +673,105 @@ public:
         if (!prepared)
             return;
         step_physics();
+#if BT_DEBUG_DRAW
+        dynamicsWorld->debugDrawWorld();
+        debugRenderer->flushLines();
+        debugRenderer->buildCommandBuffer ();
+#endif
 
         prepareFrame();
 
         this->submit(queue, &presentCompleteSemaphore, 1);
+
 #if BT_DEBUG_DRAW
         debugRenderer->submit(queue,&this->drawComplete, 1);
         VK_CHECK_RESULT(swapChain.queuePresent(queue, debugRenderer->drawComplete));
 #else
         VK_CHECK_RESULT(swapChain.queuePresent(queue, this->drawComplete));
 #endif
-        //debugRenderer->submit(queue,&this->presentCompleteSemaphore, 1);
-        //
-        //VK_CHECK_RESULT(swapChain.queuePresent(queue, debugRenderer->drawComplete));
-
     }
 
+    virtual void keyDown(uint32_t key) {
+        /*switch (key) {
+        case 37://left ctrl
+            leftFlip = true;
+            worldObjs[worldObjFlip+1].body->activate();
+            worldObjs[worldObjFlip+2].body->activate();
+            break;
+        case 105://right ctrl
+            rightFlip = true;
+            worldObjs[worldObjFlip].body->activate();
+            break;
+        }*/
+    }
+    virtual void keyUp(uint32_t key) {
+        /*switch (key) {
+        case 37://left ctrl
+            leftFlip = false;
+            worldObjs[worldObjFlip+1].body->activate();
+            worldObjs[worldObjFlip+2].body->activate();
+            break;
+        case 105://right ctrl
+            rightFlip = false;
+            worldObjs[worldObjFlip].body->activate();
+            break;
+        }*/
+    }
+    virtual void keyPressed(uint32_t key) {
+        switch (key) {
+//        case 37://left ctrl
+//            worldObjs[2].body->clearForces();
+//            break;
+//        case 105://right ctrl
+//            worldObjs[1].body->clearForces();
+//            break;
+        case 65:
+            balls[0].body->setLinearVelocity(balls[0].body->getLinearVelocity() + pushDir);
+            balls[0].body->activate();
+            break;
+        case 79://7
+            balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(0.085,0.08,-0.431)));
+            balls[0].body->setLinearVelocity(btVector3(0,0,0));
+            break;
+        case 80://8
+            balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(-0.085,0.02,0.331)));
+            balls[0].body->setLinearVelocity(btVector3(0,0,0));
+            break;
+        case 81://9
+            balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(0.085,0.01,0.365)));
+            balls[0].body->setLinearVelocity(btVector3(0,0,0));
+            break;
+        case 83://4
+            balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(-0.215,0.01,0.17)));
+            balls[0].body->setLinearVelocity(btVector3(0,0,0));
+            break;
+        case 84://5
+            //pushDir = btVector3(1,0,0);
+            //balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(-0.4457,0.05,0.535)));
+            balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(0.298,0.05,0.2)));
+            balls[0].body->setLinearVelocity(btVector3(0,0,0));
+            break;
+        case 85://6
+            balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(0.215,0.01,0.17)));
+            balls[0].body->setLinearVelocity(btVector3(0,0,0));
+            break;
+        case 87://1
+            balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(-0.11,0.02,0.22)));
+            balls[0].body->setLinearVelocity(btVector3(0,0,0));
+            break;
+        case 88:
+            balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(0.,0.02,0.)));
+            balls[0].body->setLinearVelocity(btVector3(0,0,0));
+            break;
+        case 89://3
+            balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(-0.195,0.025,-0.10)));
+            balls[0].body->setLinearVelocity(btVector3(0,0,0));
+            break;
+        case 90://0
+//            rebuildCommandBuffers();
+            break;
+        }
+    }
 };
 
 VulkanExample *vulkanExample;

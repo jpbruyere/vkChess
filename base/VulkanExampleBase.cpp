@@ -1792,6 +1792,7 @@ void VulkanExampleBase::handleEvent(const xcb_generic_event_t *event)
                 paused = !paused;
                 break;
         }
+        keyDown(keyEvent->detail);
     }
     break;
     case XCB_KEY_RELEASE:
@@ -1815,6 +1816,7 @@ void VulkanExampleBase::handleEvent(const xcb_generic_event_t *event)
                 quit = true;
                 break;
         }
+        keyUp(keyEvent->detail);
         keyPressed(keyEvent->detail);
     }
     break;
@@ -1843,6 +1845,8 @@ void VulkanExampleBase::handleEvent(const xcb_generic_event_t *event)
 
 void VulkanExampleBase::viewChanged() {}
 
+void VulkanExampleBase::keyDown(uint32_t) {}
+void VulkanExampleBase::keyUp(uint32_t) {}
 void VulkanExampleBase::keyPressed(uint32_t) {}
 
 void VulkanExampleBase::buildCommandBuffers() {}

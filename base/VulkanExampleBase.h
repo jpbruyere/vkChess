@@ -250,6 +250,8 @@ public:
     virtual VkResult createInstance(bool enableValidation);
     virtual void render() = 0;
     virtual void viewChanged();
+    virtual void keyDown(uint32_t);
+    virtual void keyUp(uint32_t);
     virtual void keyPressed(uint32_t);
     virtual void handleMouseMove(int32_t x, int32_t y);
     virtual void handleMouseButtonDown(int buttonIndex);

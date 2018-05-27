@@ -88,6 +88,11 @@ namespace vkglTF
 
         vks::VulkanDevice*  device;
 
+        //vertices list are kept for meshLoading only (usefull for bullet lowpoly meshes without texture or material
+        //their are cleared for normal loading
+        std::vector<uint32_t> indexBuffer;
+        std::vector<Vertex> vertexBuffer;
+
         vks::Buffer vertices;
         vks::Buffer indices;
         vks::Buffer instancesBuff;
@@ -349,7 +354,7 @@ namespace vkglTF
         }
 
         void loadFromFile(std::string filename, vks::VulkanDevice* _device, VkQueue transferQueue,
-                          bool instancedRendering = false, float scale = 1.0f)
+                          bool instancedRendering = false, float scale = 1.0f, bool meshOnly = false)
         {
             device = _device;//should be set in CTOR
 
@@ -371,28 +376,30 @@ namespace vkglTF
 #else
             bool fileLoaded = gltfContext.LoadASCIIFromFile(&gltfModel, &error, filename.c_str());
 #endif
-            std::vector<uint32_t> indexBuffer;
-            std::vector<Vertex> vertexBuffer;
 
             if (fileLoaded) {
-                loadImages(gltfModel, device, transferQueue, instancedRendering);
-                if (instancedRendering){
-                    texArray = new vks::Texture(device, transferQueue, VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, textures, textureSize, textureSize);
-                    for (vks::Texture texture : textures){
-                        texture.destroy();
+                if (!meshOnly) {
+                    loadImages(gltfModel, device, transferQueue, instancedRendering);
+                    if (instancedRendering){
+                        texArray = new vks::Texture(device, transferQueue, VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, textures, textureSize, textureSize);
+                        for (vks::Texture texture : textures){
+                            texture.destroy();
+                        }
+                        textures.clear();
                     }
-                    textures.clear();
-                }
-                loadMaterials(gltfModel, device, transferQueue);
-                if (instancedRendering){
-                    buildMaterialBuffer();
-                    updateMaterialBuffer();
+                    loadMaterials(gltfModel, device, transferQueue);
+                    if (instancedRendering){
+                        buildMaterialBuffer();
+                        updateMaterialBuffer();
+                    }
                 }
                 const tinygltf::Scene &scene = gltfModel.scenes[gltfModel.defaultScene];
                 for (size_t i = 0; i < scene.nodes.size(); i++) {
                     const tinygltf::Node node = gltfModel.nodes[scene.nodes[i]];
                     loadNode(node, glm::mat4(1.0f), gltfModel, indexBuffer, vertexBuffer, scale);
                 }
+                if (meshOnly)
+                    return;
             }
             else {
                 // TODO: throw
@@ -451,6 +458,9 @@ namespace vkglTF
 
             vertexStaging.destroy();
             indexStaging.destroy();
+
+            vertexBuffer.clear();
+            indexBuffer.clear();
         }
 
         uint32_t addInstance(uint32_t modelIdx, uint32_t partIdx,const glm::mat4& modelMat){
