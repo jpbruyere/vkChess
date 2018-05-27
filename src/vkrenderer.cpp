@@ -18,6 +18,13 @@ vkRenderer::vkRenderer(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
 
 vkRenderer::~vkRenderer()
 {
+    if (prepared)
+        destroy();
+}
+
+void vkRenderer::destroy() {
+    prepared = false;
+
     vertexBuff.unmap();
     vertexBuff.destroy();
 
@@ -283,7 +290,6 @@ void vkRenderer::preparePipeline()
     rasterizationStateCI.lineWidth = 5.0f;
 
     VkPipelineColorBlendAttachmentState blendAttachmentState = {};
-    blendAttachmentState.blendEnable = VK_TRUE;
     blendAttachmentState.blendEnable = VK_TRUE;
     blendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     blendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;

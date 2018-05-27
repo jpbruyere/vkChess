@@ -75,6 +75,8 @@ endif()
 add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 add_definitions(-std=c++11 -g)
 
+find_package (Bullet REQUIRED)
+
 file(GLOB SOURCE *.cpp )
 
 if(RESOURCE_INSTALL_DIR)
@@ -92,7 +94,8 @@ ENDIF(MSVC)
 IF(WIN32)
 	# Nothing here (yet)
 ELSE(WIN32)
-	link_libraries(${XCB_LIBRARIES} ${Vulkan_LIBRARY} ${Vulkan_LIBRARY} ${WAYLAND_CLIENT_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+	link_libraries(${XCB_LIBRARIES} ${Vulkan_LIBRARY} ${Vulkan_LIBRARY}
+		${WAYLAND_CLIENT_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} ${BULLET_LIBRARIES})
 ENDIF(WIN32)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/")

@@ -54,6 +54,18 @@ VkPipelineShaderStageCreateInfo loadShader(VkDevice device, std::string filename
 VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorBufferInfo* pDescBuffInfo);
 VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorImageInfo* pDescImgInfo);
 
+// AngelCode .fnt format structs and classes
+struct bmchar {
+    uint32_t x, y;
+    uint32_t width;
+    uint32_t height;
+    int32_t xoffset;
+    int32_t yoffset;
+    int32_t xadvance;
+    uint32_t page;
+};
+std::array<bmchar, 255> parsebmFont(const std::string& fileName);
+
 class VulkanExampleBase
 {
 private:

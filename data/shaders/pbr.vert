@@ -34,7 +34,7 @@ void main()
 	outWorldPos = locPos;
 	outNormal = mat3(inModel) * inNormal;
 	outUV = inUV;
-	outUV.t = 1.0 - inUV.t;
+	//outUV.t = 1.0 - inUV.t;
 	outMatId = inMatId;
 	gl_Position =  ubo.projection * ubo.view * vec4(outWorldPos, 1.0);
 }

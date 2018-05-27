@@ -72,6 +72,72 @@ VkPipelineShaderStageCreateInfo loadShader(VkDevice device, std::string filename
     return shaderStage;
 }
 
+int32_t nextValuePair(std::stringstream *stream)
+{
+    std::string pair;
+    *stream >> pair;
+    uint32_t spos = pair.find("=");
+    std::string value = pair.substr(spos + 1);
+    int32_t val = std::stoi(value);
+    return val;
+}
+// Basic parser fpr AngelCode bitmap font format files
+// See http://www.angelcode.com/products/bmfont/doc/file_format.html for details
+std::array<bmchar, 255> parsebmFont(const std::string& fileName)
+{
+    std::array<bmchar, 255> fontChars;
+
+#if defined(__ANDROID__)
+    // Font description file is stored inside the apk
+    // So we need to load it using the asset manager
+    AAsset* asset = AAssetManager_open(androidApp->activity->assetManager, fileName.c_str(), AASSET_MODE_STREAMING);
+    assert(asset);
+    size_t size = AAsset_getLength(asset);
+
+    assert(size > 0);
+
+    void *fileData = malloc(size);
+    AAsset_read(asset, fileData, size);
+    AAsset_close(asset);
+
+    std::stringbuf sbuf((const char*)fileData);
+    std::istream istream(&sbuf);
+#else
+    std::filebuf fileBuffer;
+    fileBuffer.open(fileName, std::ios::in);
+    std::istream istream(&fileBuffer);
+#endif
+
+    assert(istream.good());
+
+    while (!istream.eof())
+    {
+        std::string line;
+        std::stringstream lineStream;
+        std::getline(istream, line);
+        lineStream << line;
+
+        std::string info;
+        lineStream >> info;
+
+        if (info == "char")
+        {
+            // char id
+            uint32_t charid = nextValuePair(&lineStream);
+            // Char properties
+            fontChars[charid].x = nextValuePair(&lineStream);
+            fontChars[charid].y = nextValuePair(&lineStream);
+            fontChars[charid].width = nextValuePair(&lineStream);
+            fontChars[charid].height = nextValuePair(&lineStream);
+            fontChars[charid].xoffset = nextValuePair(&lineStream);
+            fontChars[charid].yoffset = nextValuePair(&lineStream);
+            fontChars[charid].xadvance = nextValuePair(&lineStream);
+            fontChars[charid].page = nextValuePair(&lineStream);
+        }
+    }
+    return fontChars;
+}
+
 VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorBufferInfo* pDescBuffInfo)
 {
     VkWriteDescriptorSet wds = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
