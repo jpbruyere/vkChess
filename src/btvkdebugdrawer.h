@@ -7,63 +7,64 @@
 
 class btVKDebugDrawer : public btIDebugDraw, public vkRenderer
 {
-	int m_debugMode;
+    int m_debugMode;
 
-	VkPipeline              pipelineSDFF;
-	VkPipelineLayout        pipelineLayout;
-	VkPipelineCache         pipelineCache;
+    VkPipeline              pipelineSDFF;
+    VkPipelineLayout        pipelineLayout;
+    VkPipelineCache         pipelineCache;
 
 protected:
-	std::vector<float>  sdffVertices;
-	uint32_t			vBufferSize = 10000 * sizeof(float) * 6;
+    std::vector<float>  sdffVertices;
+    uint32_t			vBufferSize = 10000 * sizeof(float) * 6;
 
 
-	virtual void destroy();
-	virtual void prepareDescriptors();
-	virtual void preparePipeline();
+    virtual void destroy();
+    virtual void prepareDescriptors();
+    virtual void preparePipeline();
 
-	void sdffAddVertex (float posX, float posY, float posZ, float uvT, float uvU);
-	void generateText(const std::string& text, btVector3 pos, float scale);
+    void sdffAddVertex (float posX, float posY, float posZ, float uvT, float uvU);
 public:
-	std::array<bmchar,255>  fontChars;
-	vks::Texture			texSDFFont;
+    std::array<bmchar,255>  fontChars;
+    vks::Texture			texSDFFont;
 
-	uint32_t			sdffVertexCount = 0;
+    uint32_t			sdffVertexCount = 0;
 
 
-	btVKDebugDrawer(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
-					VkFormat depthFormat, VkSampleCountFlagBits _sampleCount,
-					std::vector<VkFramebuffer>&_frameBuffers, vks::Buffer* _uboMatrices,
-					std::string fontFnt, vks::Texture &fontTexture);
+    btVKDebugDrawer(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
+                    VkFormat depthFormat, VkSampleCountFlagBits _sampleCount,
+                    std::vector<VkFramebuffer>&_frameBuffers, vks::Buffer* _uboMatrices,
+                    std::string fontFnt, vks::Texture &fontTexture);
 
-	virtual ~btVKDebugDrawer();
+    virtual ~btVKDebugDrawer();
 
-	virtual void buildCommandBuffer ();
+    virtual void buildCommandBuffer ();
 
-	virtual void flush();
-	virtual void clear();
+    virtual void flush();
+    virtual void clear();
 
-	void clearLines();
+    void generateText(const std::string& text, btVector3 pos, float scale);
 
-	void flushLines();
+    void clearLines();
 
-	virtual void drawLine(const btVector3& from,const btVector3& to,const btVector3& fromColor, const btVector3& toColor);
+    void flushLines();
 
-	virtual void drawLine(const btVector3& from,const btVector3& to,const btVector3& color);
+    virtual void drawLine(const btVector3& from,const btVector3& to,const btVector3& fromColor, const btVector3& toColor);
 
-	virtual void drawSphere (const btVector3& p, btScalar radius, const btVector3& color);
+    virtual void drawLine(const btVector3& from,const btVector3& to,const btVector3& color);
 
-	virtual void drawTriangle(const btVector3& a,const btVector3& b,const btVector3& c,const btVector3& color,btScalar alpha);
+    virtual void drawSphere (const btVector3& p, btScalar radius, const btVector3& color);
 
-	virtual void drawContactPoint(const btVector3& PointOnB,const btVector3& normalOnB,btScalar distance,int lifeTime,const btVector3& color);
+    virtual void drawTriangle(const btVector3& a,const btVector3& b,const btVector3& c,const btVector3& color,btScalar alpha);
 
-	virtual void reportErrorWarning(const char* warningString);
+    virtual void drawContactPoint(const btVector3& PointOnB,const btVector3& normalOnB,btScalar distance,int lifeTime,const btVector3& color);
 
-	virtual void draw3dText(const btVector3& location,const char* textString);
+    virtual void reportErrorWarning(const char* warningString);
 
-	virtual void setDebugMode(int debugMode);
+    virtual void draw3dText(const btVector3& location,const char* textString);
 
-	virtual int	getDebugMode() const { return m_debugMode;}
+    virtual void setDebugMode(int debugMode);
+
+    virtual int	getDebugMode() const { return m_debugMode;}
 
 
 

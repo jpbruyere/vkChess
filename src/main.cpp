@@ -15,7 +15,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <string>
 #include <unistd.h>
 #include <fcntl.h>
 #include <assert.h>
@@ -37,6 +37,8 @@
 
 #include "bullethelpers.h"
 
+#define CHECK_BIT(var,pos) (((var)>>(pos)) & 1)
+
 #define GLM_DEPTH_CLIP_SPACE = GLM_DEPTH_NEGATIVE_ONE_TO_ONE
 //GLM_DEPTH_ZERO_TO_ONE
 
@@ -50,7 +52,7 @@
 #define TARG_LEFT_BDY_ID 50
 #define TARG_RIGHT_BDY_ID 51
 
-#define BT_DEBUG_DRAW 0
+#define BT_DEBUG_DRAW 1
 
 constexpr unsigned int str2int(const char* str, int h = 0)
 {
@@ -183,11 +185,12 @@ public:
     btVector3 upVector = btVector3(0, cos(sloap), sin(sloap));
     btVector3 pushDir = btVector3(0,0,-1);
 
-    float   iterations          = 10;
+    int     iterations          = 10;
     float   timeStep            = 1.0f / 10000.0;
     float   fixedTimeStepDiv    = 1.0f / 400.0;
-    float   maxSubsteps         = 10.f;
+    int     maxSubsteps         = 10.f;
     int     subSteps            = 0;
+    float   lastTimeStep        = 0.f; //effective time step pass to bullet stepping func
     clock_t lastTime;
 
 
@@ -268,7 +271,7 @@ public:
                     |btIDebugDraw::DBG_DrawContactPoints
                     |btIDebugDraw::DBG_DrawConstraints
                     //|btIDebugDraw::DBG_DrawText
-                    |btIDebugDraw::DBG_DrawWireframe
+                    //|btIDebugDraw::DBG_DrawWireframe
                     );
 
         dynamicsWorld->setDebugDrawer (debugRenderer);
@@ -374,18 +377,17 @@ public:
 
 
         modBodies.loadFromFile("./../data/models/pinball-lp-obj.gltf", vulkanDevice, queue, false, 1.0f, true);
+
+        addRigidBody (getConvexHullShape(modBodies, "damp-left-lp"), 0x02,0x01, 0., 0.1)
+                ->setUserIndex(DAMP_BDY_ID);
+        models.object.addInstance("left_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+
+        addRigidBody (getConvexHullShape(modBodies, "damp-right-lp"), 0x02,0x01, 0., 0.1)
+                ->setUserIndex(DAMP_BDY_ID);
+        models.object.addInstance("right_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+
         for (int i = 0; i<modBodies.primitives.size() ; i++) {
             switch (str2int(modBodies.primitives[i].name.c_str())) {
-            case str2int("damp-left-lp")://dampers
-                addRigidBody (getConvexHullShape(modBodies, i), 0x02,0x01, 0., 0.1)
-                        ->setUserIndex(DAMP_BDY_ID);
-                models.object.addInstance("left_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
-                break;
-            case str2int("damp-right-lp"):
-                addRigidBody (getConvexHullShape(modBodies, i), 0x02,0x01, 0., 0.1)
-                        ->setUserIndex(DAMP_BDY_ID);
-                models.object.addInstance("right_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
-                break;
             case str2int("flip-lp")://flippers
                 mass = 0.09;
                 shape = getConvexHullShape (modBodies, i);
@@ -546,7 +548,7 @@ public:
         dynamicsWorld->setInternalTickCallback(myTickCallback);
 
         btContactSolverInfo& info = dynamicsWorld->getSolverInfo();
-        info.m_numIterations = int(iterations);
+        info.m_numIterations = iterations;
         info.m_splitImpulse = int(splitImpulse);
 
         initPhysicalBodies();
@@ -554,6 +556,29 @@ public:
     }
 
     void update_physics () {
+        float increment = 1.f/100000.f;
+
+
+        if (CHECK_BIT(functionKeyState, 0)) {//F1
+            fixedTimeStepDiv -= increment;
+            if (fixedTimeStepDiv <= 0.f)
+                fixedTimeStepDiv = increment;
+        }
+        if (CHECK_BIT(functionKeyState, 1)) {//F2
+            fixedTimeStepDiv += increment;
+            if (fixedTimeStepDiv <= 0.f)
+                fixedTimeStepDiv = increment;
+        }
+        if (CHECK_BIT(functionKeyState, 2)) {//F3
+            timeStep -= increment;
+            if (timeStep <= 0.f)
+                timeStep = increment;
+        }
+        if (CHECK_BIT(functionKeyState, 3)) {//F4
+            timeStep += increment;
+            if (timeStep <= 0.f)
+                timeStep = increment;
+        }
 
         btTransform trans;
         for (int i=0; i<doors.size(); i++) {
@@ -580,7 +605,6 @@ public:
 
         models.object.updateInstancesBuffer();
     }
-
 
     void step_physics () {
 
@@ -609,12 +633,12 @@ public:
 
         clock_t time = clock();
 
-        float diff = float(diffclock(time, lastTime));
+        lastTimeStep = float(diffclock(time, lastTime));
 
-        if (diff > timeStep) {
+        if (lastTimeStep > timeStep) {
             lastTime = time;
             //dynamicsWorld->updateAabbs();
-            subSteps = dynamicsWorld->stepSimulation(diff,int(maxSubsteps),fixedTimeStepDiv);
+            subSteps = dynamicsWorld->stepSimulation(lastTimeStep,maxSubsteps,fixedTimeStepDiv);
             update_physics();
             check_collisions(dynamicsWorld, this);
 
@@ -632,6 +656,21 @@ public:
             return;
 #if BT_DEBUG_DRAW
         dynamicsWorld->debugDrawWorld();
+        debugRenderer->generateText(std::to_string(player_points),btVector3(0.5,0.2,-1.0),0.2f);
+
+        debugRenderer->drawLine(btVector3(0,0,0), btVector3(1,0,0), btVector3(1,0,0));
+
+        char string[200] = {};
+
+        sprintf(string, "%.5f ms/frame (%d fps)", 1000.0f / (float)lastFPS, lastFPS);
+        debugRenderer->generateText(std::string(string),btVector3(-0.7,0.1,-0.4),0.03f);
+        sprintf(string, "Time step:%.5f Iterations:%d (last step: %.5f)", timeStep, iterations, lastTimeStep);
+        debugRenderer->generateText(std::string(string),btVector3(-0.7,0.07,-0.4),0.03f);
+        sprintf(string, "Fixed time step:%.5f", fixedTimeStepDiv);
+        debugRenderer->generateText(std::string(string),btVector3(-0.7,0.04,-0.4),0.03f);
+        sprintf(string, "Sub Step: %d (max = %d)", subSteps, maxSubsteps);
+        debugRenderer->generateText(std::string(string),btVector3(-0.7,0.01,-0.4),0.03f);
+
         debugRenderer->flushLines();
         debugRenderer->buildCommandBuffer ();
 #endif
@@ -651,6 +690,7 @@ public:
         vkDeviceWaitIdle(device);
     }
 
+    uint32_t functionKeyState = 0;
     virtual void keyDown(uint32_t key) {
         switch (key) {
         case 37://left ctrl
@@ -663,6 +703,8 @@ public:
             flippers[0].body->activate();
             break;
         }
+        if (key > 66 && key < 80)
+            functionKeyState |= 1 << (key - 67);
     }
     virtual void keyUp(uint32_t key) {
         switch (key) {
@@ -676,6 +718,8 @@ public:
             flippers[0].body->activate();
             break;
         }
+        if (key > 66 && key < 80)
+            functionKeyState &= ~(1 << (key - 67));
     }
     virtual void keyPressed(uint32_t key) {
         switch (key) {
@@ -685,6 +729,20 @@ public:
 //        case 105://right ctrl
 //            worldObjs[1].body->clearForces();
 //            break;
+        case 71://f5
+            iterations -= 1;
+            dynamicsWorld->getSolverInfo().m_numIterations = iterations;
+            break;
+        case 72:
+            iterations += 1;
+            dynamicsWorld->getSolverInfo().m_numIterations = iterations;
+            break;
+        case 73://f7
+            maxSubsteps -= 1;
+            break;
+        case 74:
+            maxSubsteps += 1;
+            break;
         case 65:
             balls[0].body->setLinearVelocity(balls[0].body->getLinearVelocity() + pushDir);
             balls[0].body->activate();
@@ -778,11 +836,18 @@ void check_collisions (btDynamicsWorld *dynamicsWorld, void *app) {
         }
         {
             case TARG_LEFT_BDY_ID:
+            case TARG_RIGHT_BDY_ID:
                 std::vector<btManifoldPoint*>& manifoldPoints = objectsCollisions[body];
                 if (manifoldPoints.size()==0)
                     continue;
                 int targ = body->getUserIndex2();
-                VulkanExample::TargetGroup* tg = &vkapp->leftTargets;
+                VulkanExample::TargetGroup* tg;
+
+                if (bdyId == TARG_LEFT_BDY_ID)
+                    tg = &vkapp->leftTargets;
+                else if (bdyId == TARG_RIGHT_BDY_ID)
+                    tg = &vkapp->rightTargets;
+
                 if (tg->targets[targ].state)
                     continue;
                 obj->setActivationState(DISABLE_SIMULATION);
@@ -809,25 +874,7 @@ void check_collisions (btDynamicsWorld *dynamicsWorld, void *app) {
             vkapp->player_points += vkapp->damper_points;
             break;
         }
-        case DOOR_BDI_ID:
-        {
-            std::vector<btManifoldPoint*>& manifoldPoints = objectsCollisions[body];
-            if (manifoldPoints.size()==0)
-                continue;
-            body->applyTorqueImpulse(btVector3(0,1,0)* -0.001);
-
         }
-        }
-
-
-//        if (body && body->getMotionState()) {
-//            body->getMotionState()->getWorldTransform(trans);
-//        } else {
-//            trans = obj->getWorldTransform();
-//        }
-//        btVector3 origin = trans.getOrigin();
-
-
     }
 }
 

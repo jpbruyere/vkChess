@@ -71,7 +71,6 @@ class VulkanExampleBase
 private:
     float fpsTimer = 0.0f;
     uint32_t frameCounter = 0;
-    uint32_t lastFPS = 0;
     std::string getWindowTitle();
     bool viewUpdated = false;
     uint32_t destWidth;
@@ -114,6 +113,7 @@ protected:
     std::string title = "Vulkan Example";
     std::string name = "vulkanExample";
 public:
+    uint32_t lastFPS = 0;
     static std::vector<const char*> args;
     bool prepared = false;
     uint32_t width = 1280;
