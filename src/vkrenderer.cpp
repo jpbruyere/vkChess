@@ -440,7 +440,7 @@ void vkRenderer::submit (VkQueue queue, VkSemaphore* waitSemaphore, uint32_t wai
     submitInfo.waitSemaphoreCount	= waitSemaphoreCount;
     submitInfo.pWaitSemaphores		= waitSemaphore;
 
-    VK_CHECK_RESULT(vkWaitForFences(device->logicalDevice, 1, &fences[swapChain->currentBuffer], VK_TRUE, UINT64_MAX));
+    VK_CHECK_RESULT(vkWaitForFences(device->logicalDevice, 1, &fences[swapChain->currentBuffer], VK_TRUE, DRAW_FENCE_TIMEOUT));
     VK_CHECK_RESULT(vkResetFences(device->logicalDevice, 1, &fences[swapChain->currentBuffer]));
 
     VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fences[swapChain->currentBuffer]));
@@ -451,6 +451,7 @@ void vkRenderer::clear(){
 }
 
 void vkRenderer::flush(){
+    VK_CHECK_RESULT(vkWaitForFences(device->logicalDevice, 1, &fences[swapChain->currentBuffer], VK_TRUE, DRAW_FENCE_TIMEOUT));
     memcpy(vertexBuff.mapped, vertices.data(), vertices.size() * sizeof(float));
     vertexCount = vertices.size() / 6;
     buildCommandBuffer();

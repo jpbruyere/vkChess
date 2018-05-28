@@ -57,6 +57,13 @@ namespace vkglTF
         uint32_t pad3;
     };
 
+    struct Dimension
+    {
+        glm::vec3 min = glm::vec3(FLT_MAX);
+        glm::vec3 max = glm::vec3(-FLT_MAX);
+        glm::vec3 size;
+    };
+
     /*
         glTF primitive class
     */
@@ -67,6 +74,7 @@ namespace vkglTF
         uint32_t    vertexBase;
         uint32_t    vertexCount;
         uint32_t    material;
+        Dimension   dims;
     };
 
     struct InstanceData {
@@ -157,12 +165,14 @@ namespace vkglTF
             // Node contains mesh data
             if (node.mesh > -1) {
                 const tinygltf::Mesh mesh = model.meshes[node.mesh];
+
                 for (size_t j = 0; j < mesh.primitives.size(); j++) {
                     const tinygltf::Primitive &primitive = mesh.primitives[j];
                     if (primitive.indices < 0) {
                         continue;
                     }
                     Primitive modPart;
+
                     modPart.indexBase = static_cast<uint32_t>(indexBuffer.size());
                     modPart.vertexBase = static_cast<uint32_t>(vertexBuffer.size());
                     modPart.material = primitive.material;
@@ -204,7 +214,17 @@ namespace vkglTF
                             //vert.pos.y *= -1.0f;
                             //vert.normal.y *= -1.0f;
                             vertexBuffer.push_back(vert);
+
+                            modPart.dims.max.x = fmax(vert.pos.x, modPart.dims.max.x);
+                            modPart.dims.max.y = fmax(vert.pos.y, modPart.dims.max.y);
+                            modPart.dims.max.z = fmax(vert.pos.z, modPart.dims.max.z);
+
+                            modPart.dims.min.x = fmin(vert.pos.x, modPart.dims.min.x);
+                            modPart.dims.min.y = fmin(vert.pos.y, modPart.dims.min.y);
+                            modPart.dims.min.z = fmin(vert.pos.z, modPart.dims.min.z);
                         }
+
+                        modPart.dims.size = modPart.dims.max - modPart.dims.min;
                     }
                     // Indices
                     {
@@ -252,6 +272,8 @@ namespace vkglTF
         void loadImages(tinygltf::Model &gltfModel, vks::VulkanDevice *device, VkQueue copyQueue, bool loadOnly = false)
         {
             for (tinygltf::Image &gltfimage : gltfModel.images) {
+                std::cout << "gltf image loading: " << gltfimage.name << std::endl << std::flush;
+
                 unsigned char* buffer = nullptr;
                 VkDeviceSize bufferSize = 0;
                 bool deleteBuffer = false;
@@ -463,7 +485,7 @@ namespace vkglTF
             indexBuffer.clear();
         }
 
-        uint32_t addInstance(uint32_t modelIdx, uint32_t partIdx,const glm::mat4& modelMat){
+        uint32_t addInstance(uint32_t partIdx,const glm::mat4& modelMat){
             uint32_t idx = instances.size();
             instances.push_back (partIdx);
             InstanceData id;
@@ -476,9 +498,12 @@ namespace vkglTF
             for (int i=0; i<primitives.size(); i++) {
                 if (name != primitives[i].name)
                     continue;
-                return addInstance(0,i,modelMat);
+                return addInstance(i,modelMat);
             }
             return 0;
+        }
+        Primitive* getPrimitiveFromInstanceIdx (uint32_t idx) {
+            return &primitives[instances[idx]];
         }
         void buildCommandBuffer(VkCommandBuffer cmdBuff, bool drawInstanced = false){
 

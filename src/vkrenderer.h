@@ -3,6 +3,8 @@
 #include "VulkanExampleBase.h"
 #include "VulkanSwapChain.hpp"
 
+#define DRAW_FENCE_TIMEOUT 9900000
+
 class vkRenderer
 {
 protected:

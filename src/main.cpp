@@ -35,6 +35,8 @@
 
 #include "btvkdebugdrawer.h"
 
+#include "bullethelpers.h"
+
 #define GLM_DEPTH_CLIP_SPACE = GLM_DEPTH_NEGATIVE_ONE_TO_ONE
 //GLM_DEPTH_ZERO_TO_ONE
 
@@ -45,9 +47,10 @@
 #define DOOR_BDI_ID 5
 #define SPIN_BDI_ID 6
 //target id range from TARG_BDY_ID + targetGroups.size, target index is in userIndex2 of body instance
-#define TARG_BDY_ID 50
+#define TARG_LEFT_BDY_ID 50
+#define TARG_RIGHT_BDY_ID 51
 
-#define BT_DEBUG_DRAW 1
+#define BT_DEBUG_DRAW 0
 
 constexpr unsigned int str2int(const char* str, int h = 0)
 {
@@ -62,206 +65,117 @@ double diffclock( clock_t clock1, clock_t clock2 ) {
 }
 std::map<const btCollisionObject*,std::vector<btManifoldPoint*>> objectsCollisions;
 
-void myTickCallback(btDynamicsWorld *dynamicsWorld, btScalar timeStep) {
-   objectsCollisions.clear();
-   int numManifolds = dynamicsWorld->getDispatcher()->getNumManifolds();
-   for (int i = 0; i < numManifolds; i++) {
-       btPersistentManifold *contactManifold = dynamicsWorld->getDispatcher()->getManifoldByIndexInternal(i);
-       const btCollisionObject *objA = contactManifold->getBody0();
-       if (objA->getUserIndex()==0)
-           continue;
-       const btCollisionObject *objB = contactManifold->getBody1();
-       if (objB->getUserIndex()==0)
-           continue;
-       std::vector<btManifoldPoint*>& collisionsA = objectsCollisions[objA];
-       std::vector<btManifoldPoint*>& collisionsB = objectsCollisions[objB];
-       int numContacts = contactManifold->getNumContacts();
-       for (int j = 0; j < numContacts; j++) {
-           btManifoldPoint& pt = contactManifold->getContactPoint(j);
-           collisionsA.push_back(&pt);
-           collisionsB.push_back(&pt);
-       }
-   }
-}
-
-/*void customNearCallback(btBroadphasePair& collisionPair, btCollisionDispatcher& dispatcher, const btDispatcherInfo& dispatchInfo)
-{
-        btCollisionObject* colObj0 = (btCollisionObject*)collisionPair.m_pProxy0->m_clientObject;
-        btCollisionObject* colObj1 = (btCollisionObject*)collisionPair.m_pProxy1->m_clientObject;
-
-        if (dispatcher.needsCollision(colObj0,colObj1))
-        {
-            //dispatcher will keep algorithms persistent in the collision pair
-            if (!collisionPair.m_algorithm)
-
-                collisionPair.m_algorithm = dispatcher.findAlgorithm (colObj0,colObj1, dispatcher.getManifoldByIndexInternal(0), BT_CONTACT_POINT_ALGORITHMS);
-            }
-
-            if (collisionPair.m_algorithm)
-            {
-                btManifoldResult contactPointResult(colObj0,colObj1);
-
-                if (dispatchInfo.m_dispatchFunc == 		btDispatcherInfo::DISPATCH_DISCRETE)
-                {
-                    //discrete collision detection query
-                    collisionPair.m_algorithm->processCollision(colObj0,colObj1,dispatchInfo,&contactPointResult);
-                } else
-                {
-                    //continuous collision detection query, time of impact (toi)
-                    float toi = collisionPair.m_algorithm->calculateTimeOfImpact(colObj0,colObj1,dispatchInfo,&contactPointResult);
-                    if (dispatchInfo.m_timeOfImpact > toi)
-                        dispatchInfo.m_timeOfImpact = toi;
-
-                }
-            }
-        }
-
-}*/
-void customNearCallback(btBroadphasePair& collisionPair,
-  btCollisionDispatcher& dispatcher, const btDispatcherInfo& dispatchInfo) {
-
-    // Do your collision logic here
-    btCollisionObject* colObj0 = (btCollisionObject*)collisionPair.m_pProxy0->m_clientObject;
-    btCollisionObject* colObj1 = (btCollisionObject*)collisionPair.m_pProxy1->m_clientObject;
-
-    if (dispatcher.needsCollision(colObj0,colObj1))
-    {
-        btCollisionObjectWrapper obj0Wrap(0,colObj0->getCollisionShape(),colObj0,colObj0->getWorldTransform(),-1,-1);
-        btCollisionObjectWrapper obj1Wrap(0,colObj1->getCollisionShape(),colObj1,colObj1->getWorldTransform(),-1,-1);
-
-
-        //dispatcher will keep algorithms persistent in the collision pair
-        if (!collisionPair.m_algorithm)
-        {
-            collisionPair.m_algorithm = dispatcher.findAlgorithm(&obj0Wrap,&obj1Wrap,0, BT_CONTACT_POINT_ALGORITHMS);
-        }
-
-        if (collisionPair.m_algorithm)
-        {
-            btManifoldResult contactPointResult(&obj0Wrap,&obj1Wrap);
-
-            if (dispatchInfo.m_dispatchFunc == 		btDispatcherInfo::DISPATCH_DISCRETE)
-            {
-                //discrete collision detection query
-
-                collisionPair.m_algorithm->processCollision(&obj0Wrap,&obj1Wrap,dispatchInfo,&contactPointResult);
-            } else
-            {
-                //continuous collision detection query, time of impact (toi)
-                btScalar toi = collisionPair.m_algorithm->calculateTimeOfImpact(colObj0,colObj1,dispatchInfo,&contactPointResult);
-                if (dispatchInfo.m_timeOfImpact > toi)
-                    dispatchInfo.m_timeOfImpact = toi;
-
-            }
-        }
-    }
-    // Only dispatch the Bullet collision information if you want the physics to continue
-    //dispatcher.defaultNearCallback(collisionPair, dispatcher, dispatchInfo);
-}
+void myTickCallback(btDynamicsWorld *dynamicsWorld, btScalar timeStep);
 void check_collisions (btDynamicsWorld *dynamicsWorld, void* vkapp);
 
-float flipperStrength = 0.0005f;
-float damperStrength = 0.04f;
+float flipperStrength = 0.0003f;
+float damperStrength = 0.02f;
 float bumperStrength = 0.02f;
 
 const btTransform slopeRotMatrix = btTransform(btQuaternion(btVector3(1,0,0), 7.f * M_PI / 180.0), btVector3(0,0,0));
 
-
-glm::mat4 btTransformToGlmMat (const btTransform &trans){
-    btVector3 o = trans.getOrigin();
-
-    btQuaternion btQ = trans.getRotation();
-    glm::quat q = glm::quat (btQ.getW(), btQ.getX(), btQ.getY(), btQ.getZ());
-    return glm::translate(glm::mat4(1.0),glm::vec3(o.getX(), o.getY(), o.getZ())) * glm::mat4(q);
-}
-
-struct Target {
-    vkglTF::Model* modGrp;
-    uint32_t    instanceIdx;
-    //vks::ModelGroup::InstanceData* pInstance;
-    uint32_t    materialIdx;
-    btScalar    xOffset;
-    bool        state;      //true when reached
-    uint        points;     //points when hit
-    btRigidBody* body;
-
-    Target (uint _points = 10) {
-        points  = _points;
-        state   = false;
-        xOffset = 0.0;
-        materialIdx = 0;
-        body = NULL;
-    }
-};
-/*
-class TargetGroup
-{
-
-public:
-    std::vector<Target> targets;
-    float       spacing;
-    float       zAngle;
-    btVector3   position;
-    float       totalWidth = 0;
-    uint32_t    targetCount = 0;
-    clock_t     reachedTime;        //store when all targets was hit
-    float       resetDelay = 1;     //reset delay in seconds
-    int         reachedTarget = 0;  //number of reached target
-
-    void tryReset (clock_t curTime) {
-        if (diffclock(curTime, reachedTime) < resetDelay)
-            return;
-        for(std::vector<Target>::iterator it = targets.begin(); it != targets.end(); ++it) {
-            it->modGrp->instanceDatas[it->instanceIdx].modelMat = btTransformToGlmMat(it->body->getWorldTransform());
-            it->body->setActivationState(ACTIVE_TAG);
-            it->state = false;
-        }
-        reachedTarget = 0;
-    }
-    btTransform getTransformation (int i) {
-        return slopeRotMatrix *
-                btTransform(btQuaternion(0, 0, 0, 1), btVector3(position.getX() , position.getY(), position.getZ())) *
-                btTransform(btQuaternion(btVector3(0,1,0), zAngle), btVector3(0,0,0)) *
-                btTransform(btQuaternion(0, 0, 0, 1), btVector3(targets[i].xOffset,0,0));
-    }
-    void addTarget (vkglTF::Model* pModGrp, uint32_t modelIdx, uint32_t modelPartIdx, uint32_t _materialIndex, uint _points = 10) {
-        //glm::vec3 newPos = glm::vec3(0,0,0);
-        Target target(_points);
-
-        float addedW = pModGrp->models[modelIdx].partDims[modelPartIdx].size.x;
-        if (targetCount > 0) {
-            float halfAW = (addedW + spacing) / 2.f;
-            for (int i=0; i<targetCount; i++)
-                targets[i].xOffset -= halfAW;
-
-            target.xOffset = (totalWidth + spacing) / 2.f ;
-            totalWidth += addedW + spacing;
-        }else
-            totalWidth = addedW;
-
-        //target.pInstance = &pModGrp->instanceDatas [pModGrp->addInstance (modelIdx, modelPartIdx, glm::mat4(), _materialIndex)];
-        target.modGrp = pModGrp;
-        target.instanceIdx = pModGrp->addInstance (modelIdx, modelPartIdx, glm::mat4(), _materialIndex);
-        targets.push_back (target);
-
-        targetCount++;
-    }
-
-    TargetGroup(btVector3 _position, float _zAngle = 0.f, float _spacing = 0.01) {
-        position = _position;
-        zAngle = _zAngle;
-        spacing = _spacing;
-    }
-};*/
-
 class VulkanExample : public vkPbrRenderer
 {
+public:
     struct MovingObject {
         btRigidBody* body;
         uint32_t instanceIdx;
     };
 
+    struct Door : MovingObject {
+        btScalar strength;
+
+        Door(btRigidBody* _body, uint32_t _instance, btScalar _strength) {
+            body = _body;
+            instanceIdx = _instance;
+            strength = _strength;
+        }
+    };
+
+    struct Target : MovingObject {
+        bool state;      //true when reached
+        uint points;     //points when hit
+
+        Target (btRigidBody* _body, uint32_t _instance, uint _points = 10) {
+            body = _body;
+            instanceIdx = _instance;
+            points  = _points;
+            state   = false;
+        }
+    };
+
+    struct TargetGroup
+    {
+        std::vector<Target> targets;
+        uint32_t    id;         //used for identifying group in collision detection as userindex1
+        float       spacing;
+        float       zAngle;
+        btVector3   position;
+        clock_t     reachedTime;        //store when all targets was hit
+        float       resetDelay;         //reset delay in seconds
+        int         reachedTargetCount;      //number of reached target
+
+        TargetGroup(uint32_t _id, btVector3 _position, float _zAngle = 0.f, float _spacing = 0.01) {
+            id = _id;
+            position = _position;
+            zAngle = _zAngle;
+            spacing = _spacing;
+            resetDelay = 1;
+            reachedTime = 0;
+            reachedTargetCount = 0;
+        }
+        TargetGroup() {}
+
+        void createBodies (vkglTF::Model& model) {
+            float totalWidth = 0.f;
+
+            float widths[targets.size()];
+
+            for (int i=0; i<targets.size(); i++) {
+                widths[i] = model.getPrimitiveFromInstanceIdx(targets[i].instanceIdx)->dims.size.x;
+                totalWidth += widths[i] + spacing;
+            }
+            totalWidth -= spacing;
+
+            float offset = -totalWidth / 2.f;
+
+            for (int i=0; i<targets.size(); i++) {
+                btTransform tr(slopeRotMatrix *
+                        btTransform(btQuaternion(0, 0, 0, 1), btVector3(position.getX() , position.getY(), position.getZ())) *
+                        btTransform(btQuaternion(btVector3(0,1,0), zAngle), btVector3(0,0,0)) *
+                        btTransform(btQuaternion(0, 0, 0, 1), btVector3(offset + widths[i] / 2.f,0,0)));
+                targets[i].body->setWorldTransform (tr);
+                targets[i].body->setUserIndex(id);
+                targets[i].body->setUserIndex2(i);
+                model.instanceDatas[targets[i].instanceIdx].modelMat = btTransformToGlmMat(tr);
+                offset += widths[i] + spacing;
+            }
+        }
+        void checkStates (clock_t curTime, vkglTF::Model& model) {
+            if (reachedTargetCount < targets.size())
+                return;
+            if (diffclock(curTime, reachedTime) < resetDelay)
+                return;
+            for (int i=0; i<targets.size(); i++) {
+                model.instanceDatas[targets[i].instanceIdx].modelMat = btTransformToGlmMat(targets[i].body->getWorldTransform());
+                targets[i].body->setActivationState(ACTIVE_TAG);
+                targets[i].state = false;
+            }
+            reachedTargetCount = 0;
+        }
+    };
+
+    std::vector<Door>         doors;
+    std::vector<MovingObject> guides;
     std::vector<MovingObject> balls;
+    std::vector<MovingObject> flippers;
+    std::vector<MovingObject> bumpers;
+    std::vector<MovingObject> spinners;
+
+
+    TargetGroup leftTargets;
+    TargetGroup rightTargets;
+
 
     float ballSize  = 0.027;
     float sloap     = 7.f * M_PI/180.0f;
@@ -270,8 +184,8 @@ class VulkanExample : public vkPbrRenderer
     btVector3 pushDir = btVector3(0,0,-1);
 
     float   iterations          = 10;
-    float   timeStep            = 1.0f / 1000.0;
-    float   fixedTimeStepDiv    = 1.0f / 600.0;
+    float   timeStep            = 1.0f / 10000.0;
+    float   fixedTimeStepDiv    = 1.0f / 400.0;
     float   maxSubsteps         = 10.f;
     int     subSteps            = 0;
     clock_t lastTime;
@@ -294,19 +208,22 @@ class VulkanExample : public vkPbrRenderer
     btVKDebugDrawer* debugRenderer = nullptr;
 #endif
 
-public:
-
+    uint player_points = 0;
+    uint bumper_points = 100;
+    uint damper_points = 10;
+    uint sinner_points = 1;
+    uint leftTarget_points = 500;
 
     VulkanExample() : vkPbrRenderer()
     {
         title = "Vulkan glTf 2.0 PBR";
         camera.type = Camera::CameraType::firstperson;
-        camera.movementSpeed = 1.0f;
-        camera.setPerspective(60.0f, (float)width / (float)height, 0.1f, 250.0f);
+        camera.movementSpeed = 0.1f;
+        camera.setPerspective (60.0f, (float)width / (float)height, 0.01f, 10.0f);
         camera.rotationSpeed = 0.05f;
 
-        camera.setRotation({ 32.0f, 0.0f, 0.0f });
-        camera.setPosition({ .05f, -0.3f, -0.64f });
+        camera.setRotation({ 40.0f, 0.0f, 0.0f });
+        camera.setPosition({ .001f, -0.35f, -0.60f });
     }
 
     ~VulkanExample()
@@ -330,10 +247,7 @@ public:
         models.object.addInstance("Plane.023", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
         models.object.addInstance("ramp-left", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
         models.object.addInstance("ramp-right", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
-        models.object.addInstance("left_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
-        models.object.addInstance("right_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
-
-        models.object.addInstance("bumper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+        models.object.addInstance("Circle.033", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
 
         init_physics();
     }
@@ -353,14 +267,13 @@ public:
                     |btIDebugDraw::DBG_DrawFrames
                     |btIDebugDraw::DBG_DrawContactPoints
                     |btIDebugDraw::DBG_DrawConstraints
-                    |btIDebugDraw::DBG_DrawText
+                    //|btIDebugDraw::DBG_DrawText
                     |btIDebugDraw::DBG_DrawWireframe
                     );
 
         dynamicsWorld->setDebugDrawer (debugRenderer);
 #endif
     }
-
 
     btRigidBody* addRigidBody (btCollisionShape* shape, int group = 0, int mask = 0xffff, btScalar restitution = 0., btScalar friction = 0., btScalar mass = 0, btTransform transformation = btTransform()){
         btRigidBody* body = nullptr;
@@ -405,21 +318,49 @@ public:
         }
         return nullptr;
     }
+    void createDoor (btCollisionShape* shape, btScalar mass, btVector3 pos, btScalar low, btScalar high, btScalar strength) {
+        static int idx = 0;
+
+        btRigidBody* body = addRigidBody (shape, 0x02,0x01, 0., 0.01, mass,
+                    slopeRotMatrix *
+                    btTransform(btQuaternion(0, 0, 0, 1), pos));
+        body->setUserIndex(DOOR_BDI_ID);
+        body->setUserIndex2(idx);
+
+        doors.push_back( Door (body,
+            models.object.addInstance("door1", glm::mat4()), strength));
+
+        btHingeConstraint* hinge = new btHingeConstraint (*body, btVector3(0,0,0), btVector3(0,1,0), false);
+        hinge->setLimit (low, high, 0.01f,1.f,-0.001f);
+        dynamicsWorld->addConstraint(hinge);
+
+        idx++;
+    }
+    void createGuide (btCollisionShape* shape, btVector3 pos, btScalar angle) {
+        static int idx = 0;
+//        btTransform tr = slopeRotMatrix *
+//                btTransform(btQuaternion(btVector3(0,1,0), angle), pos);
+        btTransform tr = slopeRotMatrix *
+                btTransform(btQuaternion(0, 0, 0, 1), pos);
+
+        guides.push_back({addRigidBody (shape, 0x02,0x01, 0., 0.01),
+            models.object.addInstance("guides", btTransformToGlmMat(tr))});
+
+        guides[idx].body->setWorldTransform (tr);
+
+        idx++;
+    }
+
     void initPhysicalBodies () {
         vkglTF::Model modBodies;
-        modBodies.loadFromFile("./../data/models/pinball-lp.gltf", vulkanDevice, queue, false, 1.0f, true);
-
 
         btCollisionShape* shape = nullptr;
         btRigidBody* body = nullptr;
-        btRigidBody::btRigidBodyConstructionInfo rbci(0, nullptr, shape, btVector3(0, 0, 0));
         btVector3 vUp = btVector3(0,1,0);
         btScalar mass = 0.6;
         btVector3 fallInertia(0, 0, 0);
         btHingeConstraint* hinge;
         btTransform trBody;
-
-        int modBodiesIdx = -1;
 
         //low plane
         shape = new btStaticPlaneShape(upVector, 0);
@@ -427,53 +368,35 @@ public:
         addRigidBody(shape, 0x02,0x01, 0.1, 0.5);
 
         //static bodies
-        //modBodiesIdx = modBodies->addModel(getAssetPath() + "models/pinball-static.obj");
+        modBodies.loadFromFile("./../data/models/pinball-lp.gltf", vulkanDevice, queue, false, 1.0f, true);
         for (int i = 0; i<modBodies.primitives.size() ; i++)
             addRigidBody (getConvexHullShape (modBodies, i), 0x02,0x01, 0.8, 0.2);
 
-        /*
-        //tests
-        modBodiesIdx = modBodies->addModel(getAssetPath() + "models/pinball.obj");
-        for (int i = 0; i<modBodies->models[modBodiesIdx].parts.size() ; i++)
-            addRigidBody (modBodies->getConvexHullShape(modBodiesIdx, i), 0x02,0x01, 0.8, 0.2);
 
-
-
-        //damper
-        modBodiesIdx = modBodies->addModel(getAssetPath() + "models/pinball-damp.obj");
-        for (int i = 0; i<modBodies->models[modBodiesIdx].parts.size() ; i++)
-            addRigidBody (modBodies->getConvexHullShape(modBodiesIdx, i), 0x02,0x01, 0., 0.1)
-                    ->setUserIndex(DAMP_BDY_ID);
-
-
-
-        modBodiesIdx = modBodies->addModel(getAssetPath() + "models/pinball-lp.obj");
-        for (int i = 0; i < modBodies->models[modBodiesIdx].parts.size(); i++){
-            switch (str2int(modBodies->models[modBodiesIdx].parts[i].name.c_str())) {
-            case str2int("target1-lp_Cube.016")://target1
-                for(int j=0; j<targetGroups.size(); j++) {
-                    shape = modBodies->getConvexHullShape(modBodiesIdx, i);
-                    TargetGroup* tg = targetGroups[j];
-                    for(int k=0; k<targetGroups[j]->targetCount; k++) {
-                        btTransform t = targetGroups[j]->getTransformation(k);
-                        body = addRigidBody (shape, 0x02,0x01, 0.5, 0.1);
-                        body->setWorldTransform (t);
-                        body->setUserIndex(TARG_BDY_ID + j);
-                        body->setUserIndex2(k);
-                        tg->targets[k].body = body;
-                        //targetGroups[j]->targets[k].pInstance->modelMat = btTransformToGlmMat (t);
-                        tg->targets[k].modGrp->instanceDatas[tg->targets[k].instanceIdx].modelMat = btTransformToGlmMat (t);
-                    }
-                }
+        modBodies.loadFromFile("./../data/models/pinball-lp-obj.gltf", vulkanDevice, queue, false, 1.0f, true);
+        for (int i = 0; i<modBodies.primitives.size() ; i++) {
+            switch (str2int(modBodies.primitives[i].name.c_str())) {
+            case str2int("damp-left-lp")://dampers
+                addRigidBody (getConvexHullShape(modBodies, i), 0x02,0x01, 0., 0.1)
+                        ->setUserIndex(DAMP_BDY_ID);
+                models.object.addInstance("left_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
                 break;
-            case str2int("flip-lp_Circle.117")://flippers
+            case str2int("damp-right-lp"):
+                addRigidBody (getConvexHullShape(modBodies, i), 0x02,0x01, 0., 0.1)
+                        ->setUserIndex(DAMP_BDY_ID);
+                models.object.addInstance("right_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+                break;
+            case str2int("flip-lp")://flippers
                 mass = 0.09;
-                shape = modBodies->getConvexHullShape(modBodiesIdx, i);
+                shape = getConvexHullShape (modBodies, i);
                 shape->calculateLocalInertia(mass, fallInertia);
                 //right
                 body = addRigidBody (shape, 0x02,0x01, 0.1, 0.2, mass,
                             slopeRotMatrix * btTransform(btQuaternion(btVector3(0,0,1), M_PI), btVector3(0.09194,0.01479,0.39887)));
-                worldObjs[worldObjFlip].body = body;
+
+                flippers.push_back({body,
+                    models.object.addInstance("flip", glm::mat4(1.0))});
+
                 hinge = new btHingeConstraint(*body, btVector3(0,0,0), vUp, false);
                 hinge->setLimit (M_PI - 0.6, M_PI + 0.5, 0.001f, 1.0f, -0.001f);
                 dynamicsWorld->addConstraint(hinge);
@@ -481,36 +404,60 @@ public:
                 body = addRigidBody (shape, 0x02,0x01, 0.1, 0.2, mass,
                             slopeRotMatrix *
                             btTransform(btQuaternion(0, 0, 0, 1), btVector3(-0.09194,0.01479,0.39887)));
-                worldObjs[worldObjFlip+1].body = body;
+
+                flippers.push_back({body,
+                    models.object.addInstance("flip", glm::mat4(1.0))});
+
                 hinge = new btHingeConstraint (*body, btVector3(0,0,0), vUp, false);
                 hinge->setLimit (-0.5, 0.6, .001f,1.0f,-0.001f);
                 dynamicsWorld->addConstraint(hinge);
                 //top left
-                shape = modBodies->getConvexHullShape(modBodiesIdx, i, 0.92f);
+                shape = getConvexHullShape(modBodies, i, 0.92f);
                 shape->calculateLocalInertia(mass, fallInertia);
                 body = addRigidBody (shape, 0x02,0x01, 0.1, 0.2, mass,
                             slopeRotMatrix *
                             btTransform(btQuaternion(0, 0, 0, 1), btVector3(-0.22988,0.01479,-0.07538)));
-                worldObjs[worldObjFlip+2].body = body;
+
+                flippers.push_back({body,
+                    models.object.addInstance("flip", glm::mat4(1.0))});
+
                 hinge = new btHingeConstraint (*body, btVector3(0,0,0), vUp, false);
                 hinge->setLimit (-1.20, 0., .001f,1.0f,-0.001f);
                 dynamicsWorld->addConstraint(hinge);
                 break;
-            case str2int("door1-lp_door1")://doors
-                shape = modBodies->getConvexHullShape(modBodiesIdx, i);
+            case str2int("guide-lp")://guide
+                shape = getConvexHullShape(modBodies, i);
+                createGuide(shape, btVector3(-0.188,0,0.248),0);
+                createGuide(shape, btVector3(0.188,0,0.248),0);
+                break;
+            case str2int("door1-lp")://doors
+                shape = getConvexHullShape(modBodies, i);
                 mass = 0.003;
                 shape->calculateLocalInertia(mass, fallInertia);
                 createDoor (shape, mass, btVector3(0.28105,0,-0.27905), 0.148, 1., -0.0001);
                 createDoor (shape, mass, btVector3(-0.06332,0,-0.5206), M_PI_2+0.1, M_PI_2 + 0.6, -0.0001);
                 createDoor (shape, mass, btVector3(0.05674,0,-0.5206), M_PI_2-0.38, M_PI_2 + 0.6, -0.0001);
                 break;
-            case str2int("guide-lp_guide")://guide
-                shape = modBodies->getConvexHullShape(modBodiesIdx, i);
-                createGuide(shape, btVector3(-0.188,0,0.248),0);
-                createGuide(shape, btVector3(0.188,0,0.248),0);
+            case str2int("bump-lp")://bumper
+            {    //bumpers
+                btVector3 bumperPos[] = {
+                    btVector3(-0.099, 0.0,-0.307),
+                    btVector3(-0.017, 0.0,-0.239),
+                    btVector3(0.058, 0.0,-0.307),
+                };
+                shape = getConvexHullShape(modBodies, i);
+                for (int j = 0; j<3 ; j++) {
+                    trBody = slopeRotMatrix * btTransform(btQuaternion(0, 0, 0, 1), bumperPos[j]);
+                    body = addRigidBody (shape, 0x02,0x01, 1.2, 0.0, 0, trBody);
+                    body->setUserIndex(BUMP_BDY_ID);
+                    body->setWorldTransform (trBody);
+                    bumpers.push_back({body,
+                        models.object.addInstance("bumper", btTransformToGlmMat(trBody))});
+                }
                 break;
-            case str2int("spinner-lp_Cube.011")://spinner
-                shape = modBodies->getConvexHullShape(modBodiesIdx, i);
+            }
+            case str2int("spinner-lp")://spinner
+                shape = getConvexHullShape(modBodies, i);
                 mass = 0.01;
                 shape->calculateLocalInertia(mass, fallInertia);
                 trBody = slopeRotMatrix *
@@ -518,33 +465,44 @@ public:
                 body = addRigidBody (shape, 0x02,0x01, 0., 0.01, mass, trBody);
                 body->setUserIndex(SPIN_BDI_ID);
                 body->setUserIndex2(1);
-                worldObjs[worldObjSpinner].body = body;
+
+                spinners.push_back({body,
+                    models.object.addInstance("spinner-hr", btTransformToGlmMat(trBody))});
+                models.object.addInstance("spinnerBord", btTransformToGlmMat(trBody));
 
                 hinge = new btHingeConstraint (*body, btVector3(0,0.006,0), btVector3(1,0,0), false);
                 hinge->setLimit (0., 2 * M_PI, 0.1f, 0.f,-1.0f);
                 dynamicsWorld->addConstraint(hinge);
-                //move spinner frame which is static, not move by physic update
-                modGrp->instanceDatas [instSpinnerFrameIdx].modelMat = btTransformToGlmMat (trBody);
                 break;
-            case str2int("bump-lp_Circle.017")://bumper
-                //bumpers
-                btVector3 bumperPos[] = {
-                    btVector3(-0.099, 0.0,-0.307),
-                    btVector3(-0.017, 0.0,-0.239),
-                    btVector3(0.058, 0.0,-0.307),
-                };
-                shape = modBodies->getConvexHullShape(modBodiesIdx, i);
-                for (int j = 0; j<3 ; j++) {
-                    trBody = slopeRotMatrix * btTransform(btQuaternion(0, 0, 0, 1), bumperPos[j]);
-                    body = addRigidBody (shape, 0x02,0x01, 1.2, 0.0, 0, trBody);
-                    body->setUserIndex(BUMP_BDY_ID);
-                    body->setWorldTransform (trBody);
-                    modGrp->instanceDatas [instBumperIdx+j].modelMat = btTransformToGlmMat (trBody);
-                }
+            case str2int("target1-lp")://target1
+                shape = getConvexHullShape(modBodies, i);
+
+                leftTargets = TargetGroup(TARG_LEFT_BDY_ID,btVector3(-0.222, 0.0, 0.032), 71.0 * M_PI/180.0, 0.003);
+
+                for (int i = 0; i < 4; i++)
+                    leftTargets.targets.push_back(
+                                Target(addRigidBody (shape, 0x02,0x01, 0.5, 0.1),
+                                models.object.addInstance("target1", glm::mat4()),leftTarget_points * i));
+
+
+
+                rightTargets = TargetGroup(TARG_RIGHT_BDY_ID,btVector3(0.276, 0.0, 0.0214), -M_PI_2, 0.003);
+
+                for (int i = 0; i < 4; i++)
+                    rightTargets.targets.push_back(
+                                Target(addRigidBody (shape, 0x02,0x01, 0.5, 0.1),
+                                models.object.addInstance("target1", glm::mat4()),leftTarget_points * i));
+
+                leftTargets.createBodies(models.object);
+                rightTargets.createBodies(models.object);
+
+                break;
+            default:
+                std::cout << modBodies.primitives[i].name << std::endl << std::flush;
                 break;
             }
         }
-*/
+
         //balls
         shape = new btSphereShape(ballSize * 0.5);
         mass = 0.08;
@@ -564,9 +522,6 @@ public:
             balls.push_back({body,
                 models.object.addInstance("ball", glm::mat4(1.0))});
         }
-
-        /*modBodies->destroy();
-        delete(modBodies);*/
     }
 
     void init_physics() {
@@ -601,67 +556,70 @@ public:
     void update_physics () {
 
         btTransform trans;
-        /*for (int i=0; i<doors.size(); i++) {
+        for (int i=0; i<doors.size(); i++) {
             doors[i].body->getMotionState()->getWorldTransform(trans);
-            modGrp->instanceDatas[doors[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
-        }*/
+            models.object.instanceDatas[doors[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
+        }
         for (int i=0; i < balls.size(); i++) {
             balls[i].body->getMotionState()->getWorldTransform(trans);
             models.object.instanceDatas[balls[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
         }
+        for (int i=0; i < flippers.size(); i++) {
+            flippers[i].body->getMotionState()->getWorldTransform(trans);
+            models.object.instanceDatas[flippers[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
+        }
+        for (int i=0; i < spinners.size(); i++) {
+            spinners[i].body->getMotionState()->getWorldTransform(trans);
+            models.object.instanceDatas[spinners[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
+        }
 
-        /*//scale top left flipper
-        modGrp->instanceDatas[worldObjs[worldObjFlip+2].instanceIdx].modelMat =
-                modGrp->instanceDatas[worldObjs[worldObjFlip+2].instanceIdx].modelMat *
-                glm::scale(glm::mat4(), glm::vec3(0.92,0.92,0.92));*/
+        //scale top left flipper
+        models.object.instanceDatas[flippers[2].instanceIdx].modelMat =
+                models.object.instanceDatas[flippers[2].instanceIdx].modelMat *
+                glm::scale(glm::mat4(1.0), glm::vec3(0.92,0.92,0.92));
 
         models.object.updateInstancesBuffer();
     }
 
 
     void step_physics () {
-        /*
+
         for (int i=0; i<doors.size(); i++)
             doors[i].body->applyTorqueImpulse(btVector3(0,1,0)* doors[i].strength);
 
-        btVector3 avSpinner = worldObjs[worldObjSpinner].body->getAngularVelocity();
+        btVector3 avSpinner = spinners[0].body->getAngularVelocity();
         if (avSpinner.getX() != 0) {
-
             avSpinner.setX(avSpinner.getX()*0.999);
-            worldObjs[worldObjSpinner].body->setAngularVelocity (avSpinner);
+            spinners[0].body->setAngularVelocity (avSpinner);
         }
 
         if (leftFlip) {
-            worldObjs[worldObjFlip+1].body->applyTorqueImpulse(btVector3(0,1,0)* flipperStrength);
-            worldObjs[worldObjFlip+2].body->applyTorqueImpulse(btVector3(0,1,0)* flipperStrength);
+            flippers[1].body->applyTorqueImpulse(btVector3(0,1,0)* flipperStrength);
+            flippers[2].body->applyTorqueImpulse(btVector3(0,1,0)* flipperStrength);
         }else {
-            worldObjs[worldObjFlip+1].body->applyTorqueImpulse(btVector3(0,-1,0)* flipperStrength);
-            worldObjs[worldObjFlip+2].body->applyTorqueImpulse(btVector3(0,-1,0)* flipperStrength);
+            flippers[1].body->applyTorqueImpulse(btVector3(0,-1,0)* flipperStrength);
+            flippers[2].body->applyTorqueImpulse(btVector3(0,-1,0)* flipperStrength);
         }
 
         if (rightFlip) {
-            worldObjs[worldObjFlip].body->applyTorqueImpulse(btVector3(0,1,0)* -flipperStrength);
+            flippers[0].body->applyTorqueImpulse(btVector3(0,1,0)* -flipperStrength);
         }else {
-            worldObjs[worldObjFlip].body->applyTorqueImpulse(btVector3(0,1,0)* flipperStrength);
+            flippers[0].body->applyTorqueImpulse(btVector3(0,1,0)* flipperStrength);
         }
-*/
+
         clock_t time = clock();
 
         float diff = float(diffclock(time, lastTime));
 
         if (diff > timeStep) {
             lastTime = time;
-            dynamicsWorld->updateAabbs();
+            //dynamicsWorld->updateAabbs();
             subSteps = dynamicsWorld->stepSimulation(diff,int(maxSubsteps),fixedTimeStepDiv);
             update_physics();
-            //check_collisions(dynamicsWorld, this);
+            check_collisions(dynamicsWorld, this);
 
-            /*
-            for(int j=0; j<targetGroups.size(); j++) {
-                TargetGroup* tg = targetGroups[j];
-                if (tg->reachedTarget == tg->targetCount)
-                    tg->tryReset (time);
-            }*/
+            leftTargets.checkStates(time, models.object);
+            rightTargets.checkStates(time, models.object);
         }
 
         //dynamicsWorld->stepSimulation(1.0/1600.0,10,1.0/1000.0);
@@ -672,7 +630,6 @@ public:
     void render () {
         if (!prepared)
             return;
-        step_physics();
 #if BT_DEBUG_DRAW
         dynamicsWorld->debugDrawWorld();
         debugRenderer->flushLines();
@@ -689,33 +646,36 @@ public:
 #else
         VK_CHECK_RESULT(swapChain.queuePresent(queue, this->drawComplete));
 #endif
+        step_physics();
+
+        vkDeviceWaitIdle(device);
     }
 
     virtual void keyDown(uint32_t key) {
-        /*switch (key) {
+        switch (key) {
         case 37://left ctrl
             leftFlip = true;
-            worldObjs[worldObjFlip+1].body->activate();
-            worldObjs[worldObjFlip+2].body->activate();
+            flippers[1].body->activate();
+            flippers[2].body->activate();
             break;
         case 105://right ctrl
             rightFlip = true;
-            worldObjs[worldObjFlip].body->activate();
+            flippers[0].body->activate();
             break;
-        }*/
+        }
     }
     virtual void keyUp(uint32_t key) {
-        /*switch (key) {
+        switch (key) {
         case 37://left ctrl
             leftFlip = false;
-            worldObjs[worldObjFlip+1].body->activate();
-            worldObjs[worldObjFlip+2].body->activate();
+            flippers[1].body->activate();
+            flippers[2].body->activate();
             break;
         case 105://right ctrl
             rightFlip = false;
-            worldObjs[worldObjFlip].body->activate();
+            flippers[0].body->activate();
             break;
-        }*/
+        }
     }
     virtual void keyPressed(uint32_t key) {
         switch (key) {
@@ -773,6 +733,104 @@ public:
         }
     }
 };
+
+void myTickCallback(btDynamicsWorld *dynamicsWorld, btScalar timeStep) {
+   objectsCollisions.clear();
+   int numManifolds = dynamicsWorld->getDispatcher()->getNumManifolds();
+   for (int i = 0; i < numManifolds; i++) {
+       btPersistentManifold *contactManifold = dynamicsWorld->getDispatcher()->getManifoldByIndexInternal(i);
+       const btCollisionObject *objA = contactManifold->getBody0();
+       if (objA->getUserIndex()==0)
+           continue;
+       const btCollisionObject *objB = contactManifold->getBody1();
+       if (objB->getUserIndex()==0)
+           continue;
+       std::vector<btManifoldPoint*>& collisionsA = objectsCollisions[objA];
+       std::vector<btManifoldPoint*>& collisionsB = objectsCollisions[objB];
+       int numContacts = contactManifold->getNumContacts();
+       for (int j = 0; j < numContacts; j++) {
+           btManifoldPoint& pt = contactManifold->getContactPoint(j);
+           collisionsA.push_back(&pt);
+           collisionsB.push_back(&pt);
+       }
+   }
+}
+
+void check_collisions (btDynamicsWorld *dynamicsWorld, void *app) {
+    VulkanExample* vkapp = (VulkanExample*) app;
+
+    for (int j = dynamicsWorld->getNumCollisionObjects() - 1; j >= 0; --j) {
+        btCollisionObject *obj = dynamicsWorld->getCollisionObjectArray()[j];
+
+        btRigidBody *body = btRigidBody::upcast(obj);
+
+        int bdyId = body->getUserIndex();
+
+        switch (bdyId) {
+        case BUMP_BDY_ID:
+        {
+            std::vector<btManifoldPoint*>& manifoldPoints = objectsCollisions[body];
+            if (manifoldPoints.size()==0)
+                continue;
+            vkapp->balls[0].body->applyImpulse(-manifoldPoints[0]->m_normalWorldOnB * damperStrength,btVector3(0,0,0));
+                        vkapp->player_points += vkapp->bumper_points;
+            break;
+        }
+        {
+            case TARG_LEFT_BDY_ID:
+                std::vector<btManifoldPoint*>& manifoldPoints = objectsCollisions[body];
+                if (manifoldPoints.size()==0)
+                    continue;
+                int targ = body->getUserIndex2();
+                VulkanExample::TargetGroup* tg = &vkapp->leftTargets;
+                if (tg->targets[targ].state)
+                    continue;
+                obj->setActivationState(DISABLE_SIMULATION);
+                tg->targets[targ].state = true;
+
+                vkapp->models.object.instanceDatas[tg->targets[targ].instanceIdx].modelMat *=
+                        glm::translate (glm::mat4(), glm::vec3(0,+0.2,0));
+
+                tg->reachedTargetCount++;
+                vkapp->player_points += tg->targets[targ].points;
+
+                if (tg->reachedTargetCount == tg->targets.size())
+                    tg->reachedTime = clock();
+
+                break;
+        }
+        case DAMP_BDY_ID:
+        {
+            std::vector<btManifoldPoint*>& manifoldPoints = objectsCollisions[body];
+            if (manifoldPoints.size()==0)
+                continue;
+            //btVector3 vDir = manifoldPoints[0]->getPositionWorldOnA() - manifoldPoints[0]->getPositionWorldOnB();
+            vkapp->balls[0].body->applyImpulse(-manifoldPoints[0]->m_normalWorldOnB * damperStrength,btVector3(0,0,0));
+            vkapp->player_points += vkapp->damper_points;
+            break;
+        }
+        case DOOR_BDI_ID:
+        {
+            std::vector<btManifoldPoint*>& manifoldPoints = objectsCollisions[body];
+            if (manifoldPoints.size()==0)
+                continue;
+            body->applyTorqueImpulse(btVector3(0,1,0)* -0.001);
+
+        }
+        }
+
+
+//        if (body && body->getMotionState()) {
+//            body->getMotionState()->getWorldTransform(trans);
+//        } else {
+//            trans = obj->getWorldTransform();
+//        }
+//        btVector3 origin = trans.getOrigin();
+
+
+    }
+}
+
 
 VulkanExample *vulkanExample;
 
