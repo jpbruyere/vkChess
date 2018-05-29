@@ -26,6 +26,7 @@ public:
     struct Models {
         vkglTF::Model object;
         vkglTF::Model skybox;
+        vkglTF::Model decal;
     } models;
 
 
@@ -45,7 +46,7 @@ public:
     struct UBOParams {
         glm::vec4 lightDir = glm::vec4(0.0f, -0.5f, -0.5f, 1.0f);
         float exposure = 4.5f;
-        float gamma = 2.2f;
+        float gamma = 1.0f;
         float prefilteredCubeMipLevels;
     } uboParams;
 
@@ -65,6 +66,7 @@ public:
     struct DescriptorSets {
         VkDescriptorSet scene;
         VkDescriptorSet materials;
+        VkDescriptorSet decals;
         VkDescriptorSet skybox;
     } descriptorSets;
 

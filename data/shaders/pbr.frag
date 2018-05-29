@@ -6,6 +6,7 @@ layout (location = 2) in vec2 inUV;
 layout (location = 3) flat in int inMatIdx;
 
 struct Material {
+	vec4 baseColorFactor;
 	uint alphaMode;
 	float alphaCutoff;
 	float metallicFactor;
@@ -153,37 +154,42 @@ vec3 perturbNormal()
 
 void main()
 {
-	vec4 rawAlbedo = texture(maps, vec3(inUV, uboMat.mats[inMatIdx].baseColorTexture-1));
+	vec4 baseColor = uboMat.mats[inMatIdx].baseColorFactor;
+	if (uboMat.mats[inMatIdx].baseColorTexture > 0)
+		baseColor *= texture(maps, vec3(inUV, uboMat.mats[inMatIdx].baseColorTexture-1));
+
 	if (uboMat.mats[inMatIdx].alphaMode == 1) {
-		if (rawAlbedo.a < uboMat.mats[inMatIdx].alphaCutoff) {
+		if (baseColor.a < uboMat.mats[inMatIdx].alphaCutoff) {
 			discard;
 		}
 	}
-	vec3 albedo = pow(rawAlbedo.rgb, vec3(2.2));
 
-	vec3 N = (uboMat.mats[inMatIdx].normalTexture > .0f) ? perturbNormal() : normalize(inNormal);
+	vec3 N = (uboMat.mats[inMatIdx].normalTexture > 0) ? perturbNormal() : normalize(inNormal);
 	vec3 V = normalize(ubo.camPos - inWorldPos);
 	vec3 R = -normalize(reflect(V, N));
 
 	float metallic = uboMat.mats[inMatIdx].metallicFactor;
 	float roughness = uboMat.mats[inMatIdx].roughnessFactor;
-	if (uboMat.mats[inMatIdx].metallicRoughnessTexture > .0f) {
+	if (uboMat.mats[inMatIdx].metallicRoughnessTexture > 0) {
 		metallic *= texture(maps, vec3(inUV, uboMat.mats[inMatIdx].metallicRoughnessTexture - 1)).b;
 		roughness *= clamp(texture(maps, vec3(inUV, uboMat.mats[inMatIdx].metallicRoughnessTexture - 1)).g, 0.04, 1.0);
 	}
 
+	vec3 Cdiff = mix (baseColor.rgb * 0.96, vec3(0.0), metallic);
 	vec3 F0 = vec3(0.04);
-	F0 = mix(F0, albedo, metallic);
+	F0 = mix(F0, baseColor.rgb, metallic);
+	float alpha = pow(roughness, 2.0);
 
 	vec3 L = normalize(uboParams.lightDir.xyz);
-	vec3 Lo = specularContribution(L, V, N, F0, metallic, roughness, albedo);
+	vec3 Lo = specularContribution(L, V, N, F0, metallic, roughness, baseColor.rgb);
 
 	vec2 brdf = texture(samplerBRDFLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
+
 	vec3 reflection = prefilteredReflection(R, roughness).rgb;
 	vec3 irradiance = texture(samplerIrradiance, N).rgb;
 
 	// Diffuse based on irradiance
-	vec3 diffuse = irradiance * albedo;
+	vec3 diffuse = irradiance * baseColor.rgb;
 
 	vec3 F = F_SchlickR(max(dot(N, V), 0.0), F0, roughness);
 
@@ -208,5 +214,5 @@ void main()
 		color += emissive;
 	}
 
-	outColor = vec4(color, rawAlbedo.a);
+	outColor = vec4(color, baseColor.a);
 }

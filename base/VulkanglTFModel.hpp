@@ -41,6 +41,7 @@ namespace vkglTF
     enum AlphaMode : uint32_t { ALPHAMODE_OPAQUE, ALPHAMODE_MASK, ALPHAMODE_BLEND };
 
     struct Material {
+        glm::vec4 baseColorFactor = glm::vec4(1.0f);
         AlphaMode alphaMode = ALPHAMODE_OPAQUE;
         float alphaCutoff = 1.0f;
         float metallicFactor = 1.0f;
@@ -337,7 +338,12 @@ namespace vkglTF
         void loadMaterials(tinygltf::Model &gltfModel, vks::VulkanDevice *device, VkQueue transferQueue)
         {
             for (tinygltf::Material &mat : gltfModel.materials) {
-                vkglTF::Material material{};
+                vkglTF::Material material = {};
+                if (mat.values.find("baseColorFactor") != mat.values.end()) {
+                    tinygltf::ColorValue c = mat.values["baseColorFactor"].ColorFactor();
+                    for (int i=0; i<c.size(); i++)
+                        material.baseColorFactor[i] = static_cast<float>(c[i]);
+                }
                 if (mat.values.find("baseColorTexture") != mat.values.end()) {
                     material.baseColorTexture = gltfModel.textures[mat.values["baseColorTexture"].TextureIndex()].source + 1;
                 }
@@ -426,7 +432,7 @@ namespace vkglTF
             else {
                 // TODO: throw
                 std::cerr << "Could not load gltf file: " << error << std::endl;
-                return;
+                exit(-1);
             }
 
             size_t vertexBufferSize = vertexBuffer.size() * sizeof(Vertex);
@@ -484,7 +490,11 @@ namespace vkglTF
             vertexBuffer.clear();
             indexBuffer.clear();
         }
-
+        void addOneInstanceOfEach () {
+            for (int i=0; i<primitives.size(); i++) {
+                addInstance(i,glm::mat4(1));
+            }
+        }
         uint32_t addInstance(uint32_t partIdx,const glm::mat4& modelMat){
             uint32_t idx = instances.size();
             instances.push_back (partIdx);
@@ -581,5 +591,18 @@ namespace vkglTF
         void updateMaterialBuffer(){
             memcpy(materialsBuff.mapped, materials.data(), sizeof(Material)*materials.size());
         }
+        void disableEmissive (uint32_t matIdx) {
+            VkDeviceSize offset = matIdx * sizeof(Material) + 48;
+            uint32_t* emissive = (uint32_t*)(materialsBuff.mapped + offset);
+            *emissive = 0;
+            materialsBuff.flush(4, offset);
+        }
+        void enableEmissive (uint32_t matIdx) {
+            VkDeviceSize offset = matIdx * sizeof(Material) + 48;
+            uint32_t* emissive = (uint32_t*)(materialsBuff.mapped + offset);
+            *emissive = materials[matIdx].emissiveTexture;
+            materialsBuff.flush(4, offset);
+        }
+
     };
 }

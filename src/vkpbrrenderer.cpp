@@ -103,6 +103,13 @@ void vkPbrRenderer::buildCommandBuffers()
 
         models.object.buildCommandBuffer(drawCmdBuffers[i], true);
 
+
+        vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbrAlphaBlend);
+
+        descriptorsets[1] = descriptorSets.decals;
+        vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 2, descriptorsets.data(), 0, NULL);
+
+        models.decal.buildCommandBuffer(drawCmdBuffers[i], true);
         // Transparent last
         // TODO: Correct depth sorting
         /*vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbrAlphaBlend);
@@ -135,16 +142,6 @@ void vkPbrRenderer::loadAssets()
 #endif
     textures.environmentCube.loadFromFile(assetpath + "textures/papermill_hdr16f_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
     models.skybox.loadFromFile(assetpath + "models/Box/glTF-Embedded/Box.gltf", vulkanDevice, queue);
-    //models.object.loadFromFile(assetpath + "models/DamagedHelmet/glTF-Embedded/DamagedHelmet.gltf", vulkanDevice, queue);
-    //models.object.loadFromFile("/home/jp/untitled.gltf", vulkanDevice, queue);
-    //models.object.loadFromFile("/home/jp/games/chess2-gltf/scene.gltf", vulkanDevice, queue);
-    //models.object.loadFromFile("/home/jp/gltf/xwing/helmet.gltf", vulkanDevice, queue, true);
-
-    //models.object.loadFromFile(assetpath + "models/DamagedHelmet/glTF-Embedded/DamagedHelmet.gltf", vulkanDevice, queue, true);
-    //models.object.addInstance(0,0,glm::mat4(1.0));
-
-
-    //models.object.loadFromFile("/home/jp/gltf/xwing/scene.gltf", vulkanDevice, queue);
 }
 
 void vkPbrRenderer::setupDescriptors()
@@ -156,7 +153,7 @@ void vkPbrRenderer::setupDescriptors()
     VkDescriptorPoolCreateInfo descriptorPoolCI = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     descriptorPoolCI.poolSizeCount = 2;
     descriptorPoolCI.pPoolSizes = poolSizes.data();
-    descriptorPoolCI.maxSets = 3;
+    descriptorPoolCI.maxSets = 4;
     VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolCI, nullptr, &descriptorPool));
 
     /*
@@ -215,6 +212,16 @@ void vkPbrRenderer::setupDescriptors()
             std::array<VkWriteDescriptorSet, 2> writeDescriptorSets{
                 createWriteDS (descriptorSets.materials, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &models.object.texArray->descriptor),
                 createWriteDS (descriptorSets.materials, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &models.object.materialsBuff.descriptor),
+            };
+
+            vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+        }
+        VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &descriptorSetAllocInfo, &descriptorSets.decals));
+
+        {
+            std::array<VkWriteDescriptorSet, 2> writeDescriptorSets{
+                createWriteDS (descriptorSets.decals, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &models.decal.texArray->descriptor),
+                createWriteDS (descriptorSets.decals, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &models.decal.materialsBuff.descriptor),
             };
 
             vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
@@ -357,6 +364,9 @@ void vkPbrRenderer::preparePipelines()
         loadShader(device, "pbr.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
     };
     VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.pbr));
+
+    depthStencilStateCI.depthWriteEnable = VK_FALSE;
+    depthStencilStateCI.depthTestEnable = VK_FALSE;
 
     rasterizationStateCI.cullMode = VK_CULL_MODE_NONE;
     blendAttachmentState.blendEnable = VK_TRUE;
@@ -1264,6 +1274,7 @@ void vkPbrRenderer::prepare()
     loadAssets();
 
     models.object.buildInstanceBuffer();
+    models.decal.buildInstanceBuffer();
 
     generateBRDFLUT();
     generateCubemaps();

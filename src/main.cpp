@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
+#include <string_view>
 #include <unistd.h>
 #include <fcntl.h>
 #include <assert.h>
@@ -48,6 +49,7 @@
 #define DAMP_BDY_ID 3
 #define DOOR_BDI_ID 5
 #define SPIN_BDI_ID 6
+#define TRIG_BDI_ID 7
 //target id range from TARG_BDY_ID + targetGroups.size, target index is in userIndex2 of body instance
 #define TARG_LEFT_BDY_ID 50
 #define TARG_RIGHT_BDY_ID 51
@@ -94,6 +96,11 @@ public:
         }
     };
 
+    struct Action
+    {
+        Action() {}
+    };
+
     struct Target : MovingObject {
         bool state;      //true when reached
         uint points;     //points when hit
@@ -106,29 +113,77 @@ public:
         }
     };
 
-    struct TargetGroup
+    struct Trigger {
+        bool state;
+        clock_t     reachedTime;        //store when all targets was hit
+        float       resetDelay;         //reset delay in seconds
+
+        Trigger () {
+            resetDelay = 1;
+            reachedTime = 0;
+            state = false;
+        }
+
+        virtual void checkStates (clock_t curTime) {
+            if (!state)
+                return;
+            if (diffclock(curTime, reachedTime) < resetDelay)
+                return;
+            reset();
+            reachedTime = 0;
+        }
+        virtual void action (clock_t curTime) {
+            if (state)
+                return;
+            state = true;
+            reachedTime = curTime;
+        }
+        virtual void reset () {
+            state = false;
+        }
+    };
+
+    struct LightTrigger : Trigger {
+        uint32_t matIdx;
+        vkglTF::Model* mod;
+
+        LightTrigger(vkglTF::Model* _mod, uint32_t _matIdx) : Trigger() {
+            mod = _mod;
+            matIdx = _matIdx;
+        }
+
+        void action (clock_t curTime) {
+            mod->enableEmissive(matIdx);
+            state = true;
+            reachedTime = curTime;
+        }
+        void reset () {
+            mod->disableEmissive(matIdx);
+            state = false;
+        }
+    };
+
+    struct TargetGroup : Trigger
     {
         std::vector<Target> targets;
         uint32_t    id;         //used for identifying group in collision detection as userindex1
         float       spacing;
         float       zAngle;
         btVector3   position;
-        clock_t     reachedTime;        //store when all targets was hit
-        float       resetDelay;         //reset delay in seconds
         int         reachedTargetCount;      //number of reached target
+        vkglTF::Model* mod;
 
-        TargetGroup(uint32_t _id, btVector3 _position, float _zAngle = 0.f, float _spacing = 0.01) {
+        TargetGroup(uint32_t _id, btVector3 _position, float _zAngle = 0.f, float _spacing = 0.01) : Trigger() {
             id = _id;
             position = _position;
             zAngle = _zAngle;
             spacing = _spacing;
-            resetDelay = 1;
-            reachedTime = 0;
             reachedTargetCount = 0;
         }
         TargetGroup() {}
 
         void createBodies (vkglTF::Model& model) {
+            mod = &model;
             float totalWidth = 0.f;
 
             float widths[targets.size()];
@@ -149,21 +204,30 @@ public:
                 targets[i].body->setWorldTransform (tr);
                 targets[i].body->setUserIndex(id);
                 targets[i].body->setUserIndex2(i);
-                model.instanceDatas[targets[i].instanceIdx].modelMat = btTransformToGlmMat(tr);
+                mod->instanceDatas[targets[i].instanceIdx].modelMat = btTransformToGlmMat(tr);
                 offset += widths[i] + spacing;
             }
         }
-        void checkStates (clock_t curTime, vkglTF::Model& model) {
+        void checkStates (clock_t curTime) {
             if (reachedTargetCount < targets.size())
                 return;
             if (diffclock(curTime, reachedTime) < resetDelay)
                 return;
+            reset();
+        }
+
+        void action(clock_t curTime) {
+            reachedTime = curTime;
+        }
+        void reset() {
             for (int i=0; i<targets.size(); i++) {
-                model.instanceDatas[targets[i].instanceIdx].modelMat = btTransformToGlmMat(targets[i].body->getWorldTransform());
+                mod->instanceDatas[targets[i].instanceIdx].modelMat =
+                        btTransformToGlmMat(targets[i].body->getWorldTransform());
                 targets[i].body->setActivationState(ACTIVE_TAG);
                 targets[i].state = false;
             }
             reachedTargetCount = 0;
+            state = false;
         }
     };
 
@@ -177,6 +241,8 @@ public:
 
     TargetGroup leftTargets;
     TargetGroup rightTargets;
+
+    std::vector<Trigger*>    triggers;
 
 
     float ballSize  = 0.027;
@@ -242,17 +308,29 @@ public:
         delete broadphase;
     }
 
+
     virtual void loadAssets() {
         vkPbrRenderer::loadAssets();
 
+        models.decal.loadFromFile("./../data/models/pinball-decal.gltf", vulkanDevice, queue, true);
+        models.decal.addOneInstanceOfEach();
+
+
+        models.decal.disableEmissive(0);
+
+
         models.object.loadFromFile("./../data/models/pinball.gltf", vulkanDevice, queue, true);
 
-        models.object.addInstance("Plane.023", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+        models.object.addInstance("mainFrame", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
         models.object.addInstance("ramp-left", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
         models.object.addInstance("ramp-right", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
         models.object.addInstance("Circle.033", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
 
         init_physics();
+
+        triggers.push_back (new LightTrigger(&models.decal, 0));
+        triggers.push_back (new LightTrigger(&models.decal, 0));
+
     }
     virtual void prepare() {
         vkPbrRenderer::prepare();
@@ -372,9 +450,14 @@ public:
 
         //static bodies
         modBodies.loadFromFile("./../data/models/pinball-lp.gltf", vulkanDevice, queue, false, 1.0f, true);
-        for (int i = 0; i<modBodies.primitives.size() ; i++)
-            addRigidBody (getConvexHullShape (modBodies, i), 0x02,0x01, 0.8, 0.2);
-
+        for (int i = 0; i<modBodies.primitives.size() ; i++) {
+            btRigidBody* bdy = addRigidBody (getConvexHullShape (modBodies, i), 0x02,0x01, 0.8, 0.2);
+            if (strncmp(modBodies.primitives[i].name.c_str(), "trig", 4) == 0){
+                int trigId = stoi(modBodies.primitives[i].name.substr(6, 3));
+                bdy->setUserIndex(TRIG_BDI_ID);
+                bdy->setUserIndex2(trigId);
+            }
+        }
 
         modBodies.loadFromFile("./../data/models/pinball-lp-obj.gltf", vulkanDevice, queue, false, 1.0f, true);
 
@@ -642,8 +725,11 @@ public:
             update_physics();
             check_collisions(dynamicsWorld, this);
 
-            leftTargets.checkStates(time, models.object);
-            rightTargets.checkStates(time, models.object);
+            leftTargets.checkStates(time);
+            rightTargets.checkStates(time);
+
+            for (int i=0; i<triggers.size(); i++)
+                triggers[i]->checkStates(time);
         }
 
         //dynamicsWorld->stepSimulation(1.0/1600.0,10,1.0/1000.0);
@@ -843,10 +929,11 @@ void check_collisions (btDynamicsWorld *dynamicsWorld, void *app) {
                 int targ = body->getUserIndex2();
                 VulkanExample::TargetGroup* tg;
 
-                if (bdyId == TARG_LEFT_BDY_ID)
+                if (bdyId == TARG_LEFT_BDY_ID){
                     tg = &vkapp->leftTargets;
-                else if (bdyId == TARG_RIGHT_BDY_ID)
+                }else if (bdyId == TARG_RIGHT_BDY_ID){
                     tg = &vkapp->rightTargets;
+                }
 
                 if (tg->targets[targ].state)
                     continue;
@@ -872,6 +959,15 @@ void check_collisions (btDynamicsWorld *dynamicsWorld, void *app) {
             //btVector3 vDir = manifoldPoints[0]->getPositionWorldOnA() - manifoldPoints[0]->getPositionWorldOnB();
             vkapp->balls[0].body->applyImpulse(-manifoldPoints[0]->m_normalWorldOnB * damperStrength,btVector3(0,0,0));
             vkapp->player_points += vkapp->damper_points;
+            break;
+        }
+        case TRIG_BDI_ID:
+        {
+            std::vector<btManifoldPoint*>& manifoldPoints = objectsCollisions[body];
+            if (manifoldPoints.size()==0)
+                continue;
+
+            vkapp->triggers[body->getUserIndex2()]->action(clock());
             break;
         }
         }
