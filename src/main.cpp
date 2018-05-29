@@ -98,7 +98,72 @@ public:
 
     struct Action
     {
+        enum Type {SetTrue, SetFalse, Toogle, SetValue, Increment, Decrement };
         Action() {}
+    };
+
+    struct Switch {
+        bool status;
+
+        Switch () {
+            status = false;
+        }
+        void setOn() {
+            if (!status)
+                toogle();
+        }
+        void setOff() {
+            if (status)
+                toogle();
+        }
+        virtual void toogle() = 0;
+    };
+
+    struct PlateLight : Switch {
+        uint32_t matIdx;
+        vkglTF::Model* mod;
+
+        PlateLight(vkglTF::Model* _mod, uint32_t _matIdx) : Switch() {
+            mod = _mod;
+            matIdx = _matIdx;
+        }
+        PlateLight(vkglTF::Model* _mod, const std::string& name) : Switch() {
+            mod = _mod;
+            matIdx = _mod->getMaterialIndex(name);
+        }
+
+        void toogle() {
+            status =!status;
+            if (status)
+                mod->enableEmissive(matIdx);
+            else
+                mod->disableEmissive(matIdx);
+        }
+    };
+
+    struct LightAnim {
+        std::vector<PlateLight*> lights;
+        uint32_t currentLight;
+        clock_t  lastStepTime;
+        float timeStep;
+
+        LightAnim() {
+            timeStep = 0.1f;
+            lastStepTime = clock();
+            currentLight = 0;
+        }
+
+        void animate(clock_t curTime) {
+            if (diffclock(curTime, lastStepTime) < timeStep)
+                return;
+            lastStepTime = curTime;
+            lights[currentLight]->setOff();
+            if (currentLight < lights.size() - 1)
+                currentLight++;
+            else
+                currentLight = 0;
+            lights[currentLight]->setOn();
+        }
     };
 
     struct Target : MovingObject {
@@ -114,7 +179,7 @@ public:
     };
 
     struct Trigger {
-        bool state;
+        bool        state;
         clock_t     reachedTime;        //store when all targets was hit
         float       resetDelay;         //reset delay in seconds
 
@@ -242,7 +307,11 @@ public:
     TargetGroup leftTargets;
     TargetGroup rightTargets;
 
-    std::vector<Trigger*>    triggers;
+    std::vector<Trigger*>   triggers;
+    std::vector<Switch*>    switches;
+    std::vector<PlateLight*> plateLights;
+
+    LightAnim planetsAnims;
 
 
     float ballSize  = 0.027;
@@ -330,6 +399,24 @@ public:
 
         triggers.push_back (new LightTrigger(&models.decal, 0));
         triggers.push_back (new LightTrigger(&models.decal, 0));
+
+
+
+        plateLights.push_back(new PlateLight(&models.decal, "planets.001"));
+        plateLights.push_back(new PlateLight(&models.decal, "planets.002"));
+        plateLights.push_back(new PlateLight(&models.decal, "planets.003"));
+        plateLights.push_back(new PlateLight(&models.decal, "planets.004"));
+        plateLights.push_back(new PlateLight(&models.decal, "planets.005"));
+        plateLights.push_back(new PlateLight(&models.decal, "planets.006"));
+        plateLights.push_back(new PlateLight(&models.decal, "planets.007"));
+        plateLights.push_back(new PlateLight(&models.decal, "planets.008"));
+        plateLights.push_back(new PlateLight(&models.decal, "planets.009"));
+        plateLights.push_back(new PlateLight(&models.decal, "planets.010"));
+
+        for(int i=0; i<10; i++)
+            planetsAnims.lights.push_back(plateLights[i]);
+
+        planetsAnims.timeStep = 0.02f;
 
     }
     virtual void prepare() {
@@ -730,6 +817,8 @@ public:
 
             for (int i=0; i<triggers.size(); i++)
                 triggers[i]->checkStates(time);
+
+            planetsAnims.animate(time);
         }
 
         //dynamicsWorld->stepSimulation(1.0/1600.0,10,1.0/1000.0);

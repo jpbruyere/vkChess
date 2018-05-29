@@ -12,6 +12,8 @@
 #include <string>
 #include <fstream>
 #include <vector>
+#include <map>
+
 
 #include "vulkan/vulkan.h"
 #include "VulkanDevice.hpp"
@@ -112,6 +114,7 @@ namespace vkglTF
 
         std::vector<vks::Texture>       textures;
         std::vector<Material>           materials;
+        std::map<std::string, int>      materialsNames;
         std::vector<uint32_t>           instances;
         std::vector<InstanceData>       instanceDatas;
         //std::vector<VkDescriptorSet>    descriptorSets;
@@ -377,6 +380,7 @@ namespace vkglTF
                 if (mat.additionalValues.find("alphaCutoff") != mat.additionalValues.end()) {
                     material.alphaCutoff = static_cast<float>(mat.additionalValues["alphaCutoff"].Factor());
                 }
+                materialsNames.insert(std::make_pair(mat.name, materials.size()));
                 materials.push_back(material);
             }
         }
@@ -514,6 +518,10 @@ namespace vkglTF
         }
         Primitive* getPrimitiveFromInstanceIdx (uint32_t idx) {
             return &primitives[instances[idx]];
+        }
+        int getMaterialIndex (const std::string& _name) {
+            std::map<std::string, int>::iterator it = materialsNames.find(_name);
+            return it == materialsNames.end() ? -1 : it->second;
         }
         void buildCommandBuffer(VkCommandBuffer cmdBuff, bool drawInstanced = false){
 
