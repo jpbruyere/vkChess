@@ -22,8 +22,6 @@ protected:
     VkCommandPool               commandPool;
     std::vector<VkCommandBuffer>cmdBuffers;
 
-    VkDescriptorPool        descriptorPool;
-    VkDescriptorSetLayout   descriptorSetLayout;
     VkDescriptorSet         descriptorSet;
 
     std::vector<VkFence>    fences;
@@ -46,6 +44,9 @@ protected:
     virtual void preparePipeline();
 
 public:
+    VkDescriptorPool        descriptorPool;
+    VkDescriptorSetLayout   descriptorSetLayout;
+
     VkSemaphore         drawComplete;
     uint32_t			vertexCount = 0;
     uint32_t			sdffVertexCount = 0;

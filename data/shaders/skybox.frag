@@ -1,6 +1,6 @@
 #version 450
 
-layout (binding = 2) uniform samplerCube samplerEnv;
+layout (binding = 3) uniform samplerCube samplerEnv;
 
 layout (set = 0, location = 0) in vec3 inUVW;
 
@@ -25,15 +25,15 @@ vec3 Uncharted2Tonemap(vec3 color)
 	return ((color*(A*color+C*B)+D*E)/(color*(A*color+B)+D*F))-E/F;
 }
 
-void main() 
+void main()
 {
 	vec3 color = textureLod(samplerEnv, inUVW, 0.5).rgb;
 
 	// Tone mapping
 	color = Uncharted2Tonemap(color * uboParams.exposure);
-	color = color * (1.0f / Uncharted2Tonemap(vec3(11.2f)));	
+	color = color * (1.0f / Uncharted2Tonemap(vec3(11.2f)));
 	// Gamma correction
 	color = pow(color, vec3(1.0f / uboParams.gamma));
-	
+
 	outColor = vec4(color * 1.0, 1.0);
 }

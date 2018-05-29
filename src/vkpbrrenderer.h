@@ -12,45 +12,42 @@
 class vkPbrRenderer : public VulkanExampleBase
 {
 public:
+    std::vector<vkglTF::Model> models2;
+
     std::vector<VkFence>    fences;
     VkSemaphore             drawComplete;
     VkSubmitInfo            submitInfo;
 
     struct Textures {
         vks::TextureCubeMap environmentCube;
-        vks::Texture2D lutBrdf;
+        vks::Texture2D      lutBrdf;
         vks::TextureCubeMap irradianceCube;
         vks::TextureCubeMap prefilteredCube;
     } textures;
 
     struct Models {
-        vkglTF::Model object;
         vkglTF::Model skybox;
-        vkglTF::Model decal;
     } models;
-
 
     struct UniformBuffers {
         vks::Buffer matrices;
         vks::Buffer skybox;
         vks::Buffer params;
-    } uniformBuffers;
+    } sharedUBOs;
 
-    struct UBOMatrices {
+    struct MVPMatrices {
         glm::mat4 projection;
         glm::mat4 model;
         glm::mat4 view;
         glm::vec3 camPos;
-    } uboMatrices;
+    } mvpMatrices;
 
-    struct UBOParams {
+    struct LightingParams {
         glm::vec4 lightDir = glm::vec4(0.0f, -0.5f, -0.5f, 1.0f);
         float exposure = 4.5f;
         float gamma = 1.0f;
         float prefilteredCubeMipLevels;
-    } uboParams;
-
-    VkPipelineLayout pipelineLayout;
+    } lightingParams;
 
     struct Pipelines {
         VkPipeline skybox;
@@ -58,17 +55,13 @@ public:
         VkPipeline pbrAlphaBlend;
     } pipelines;
 
-    struct DescriptorSetLayouts {
-        VkDescriptorSetLayout scene;
-        VkDescriptorSetLayout material;
-    } descriptorSetLayouts;
+    VkPipelineLayout        pipelineLayout;
+    VkDescriptorPool        descriptorPool;
+    VkDescriptorSetLayout   dsLayoutModels;
+    VkDescriptorSetLayout   dsLayoutScene;
 
-    struct DescriptorSets {
-        VkDescriptorSet scene;
-        VkDescriptorSet materials;
-        VkDescriptorSet decals;
-        VkDescriptorSet skybox;
-    } descriptorSets;
+    VkDescriptorSet         dsScene;
+
 
     glm::vec3 rotation = glm::vec3(0.0f, 135.0f, 0.0f);
 

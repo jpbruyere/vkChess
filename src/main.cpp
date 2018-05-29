@@ -247,14 +247,14 @@ public:
         }
         TargetGroup() {}
 
-        void createBodies (vkglTF::Model& model) {
-            mod = &model;
+        void createBodies (vkglTF::Model* model) {
+            mod = model;
             float totalWidth = 0.f;
 
             float widths[targets.size()];
 
             for (int i=0; i<targets.size(); i++) {
-                widths[i] = model.getPrimitiveFromInstanceIdx(targets[i].instanceIdx)->dims.size.x;
+                widths[i] = mod->getPrimitiveFromInstanceIdx(targets[i].instanceIdx)->dims.size.x;
                 totalWidth += widths[i] + spacing;
             }
             totalWidth -= spacing;
@@ -313,6 +313,8 @@ public:
 
     LightAnim planetsAnims;
 
+    vkglTF::Model* modMain;
+    vkglTF::Model* modDecal;
 
     float ballSize  = 0.027;
     float sloap     = 7.f * M_PI/180.0f;
@@ -320,7 +322,7 @@ public:
     btVector3 upVector = btVector3(0, cos(sloap), sin(sloap));
     btVector3 pushDir = btVector3(0,0,-1);
 
-    int     iterations          = 10;
+    int     iterations          = 4;
     float   timeStep            = 1.0f / 10000.0;
     float   fixedTimeStepDiv    = 1.0f / 400.0;
     int     maxSubsteps         = 10.f;
@@ -329,7 +331,7 @@ public:
     clock_t lastTime;
 
 
-    bool    splitImpulse        = false;
+    bool    splitImpulse    = true;
     const float inpulse     = 2.f;
     const int   target      = 2;
     bool        leftFlip    = false;
@@ -357,11 +359,11 @@ public:
         title = "Vulkan glTf 2.0 PBR";
         camera.type = Camera::CameraType::firstperson;
         camera.movementSpeed = 0.1f;
-        camera.setPerspective (60.0f, (float)width / (float)height, 0.01f, 10.0f);
+        camera.setPerspective (70.0f, (float)width / (float)height, 0.01f, 10.0f);
         camera.rotationSpeed = 0.05f;
 
-        camera.setRotation({ 40.0f, 0.0f, 0.0f });
-        camera.setPosition({ .001f, -0.35f, -0.60f });
+        camera.setRotation({ 45.0f, 0.0f, 0.0f });
+        camera.setPosition({ .001f, -0.38f, -0.57f });
     }
 
     ~VulkanExample()
@@ -381,37 +383,40 @@ public:
     virtual void loadAssets() {
         vkPbrRenderer::loadAssets();
 
-        models.decal.loadFromFile("./../data/models/pinball-decal.gltf", vulkanDevice, queue, true);
-        models.decal.addOneInstanceOfEach();
+        models2.resize(2);
+        modDecal = &models2[0];
+        modMain = &models2[1];
+
+        modDecal->loadFromFile("./../data/models/pinball-decal.gltf", vulkanDevice, queue, true);
+        modDecal->addOneInstanceOfEach();
 
 
-        models.decal.disableEmissive(0);
+        modMain->loadFromFile("./../data/models/pinball.gltf", vulkanDevice, queue, true);
 
-
-        models.object.loadFromFile("./../data/models/pinball.gltf", vulkanDevice, queue, true);
-
-        models.object.addInstance("mainFrame", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
-        models.object.addInstance("ramp-left", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
-        models.object.addInstance("ramp-right", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
-        models.object.addInstance("Circle.033", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+        modMain->addInstance("mainFrame", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+        modMain->addInstance("ramp-left", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+        modMain->addInstance("ramp-right", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+        modMain->addInstance("Circle.033", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
 
         init_physics();
 
-        triggers.push_back (new LightTrigger(&models.decal, 0));
-        triggers.push_back (new LightTrigger(&models.decal, 0));
+        triggers.push_back (new LightTrigger(modDecal, 0));
+        triggers.push_back (new LightTrigger(modDecal, 0));
+        triggers.push_back (new LightTrigger(modDecal, 0));
+        triggers.push_back (new LightTrigger(modDecal, 0));
 
+        plateLights.push_back(new PlateLight(modDecal, "planets.001"));
+        plateLights.push_back(new PlateLight(modDecal, "planets.002"));
+        plateLights.push_back(new PlateLight(modDecal, "planets.003"));
+        plateLights.push_back(new PlateLight(modDecal, "planets.004"));
+        plateLights.push_back(new PlateLight(modDecal, "planets.005"));
+        plateLights.push_back(new PlateLight(modDecal, "planets.006"));
+        plateLights.push_back(new PlateLight(modDecal, "planets.007"));
+        plateLights.push_back(new PlateLight(modDecal, "planets.008"));
+        plateLights.push_back(new PlateLight(modDecal, "planets.009"));
+        plateLights.push_back(new PlateLight(modDecal, "planets.010"));
 
-
-        plateLights.push_back(new PlateLight(&models.decal, "planets.001"));
-        plateLights.push_back(new PlateLight(&models.decal, "planets.002"));
-        plateLights.push_back(new PlateLight(&models.decal, "planets.003"));
-        plateLights.push_back(new PlateLight(&models.decal, "planets.004"));
-        plateLights.push_back(new PlateLight(&models.decal, "planets.005"));
-        plateLights.push_back(new PlateLight(&models.decal, "planets.006"));
-        plateLights.push_back(new PlateLight(&models.decal, "planets.007"));
-        plateLights.push_back(new PlateLight(&models.decal, "planets.008"));
-        plateLights.push_back(new PlateLight(&models.decal, "planets.009"));
-        plateLights.push_back(new PlateLight(&models.decal, "planets.010"));
+        plateLights.push_back(new PlateLight(modDecal, "arrow.001"));
 
         for(int i=0; i<10; i++)
             planetsAnims.lights.push_back(plateLights[i]);
@@ -428,7 +433,7 @@ public:
 
 
         debugRenderer = new btVKDebugDrawer (vulkanDevice, &swapChain, depthFormat, settings.sampleCount,
-                                                        frameBuffers, &uniformBuffers.matrices,
+                                                        frameBuffers, &sharedUBOs.matrices,
                                              "./../data/font.fnt", fontTexture);
         debugRenderer->setDebugMode(
                     btIDebugDraw::DBG_DrawConstraintLimits
@@ -496,7 +501,7 @@ public:
         body->setUserIndex2(idx);
 
         doors.push_back( Door (body,
-            models.object.addInstance("door1", glm::mat4()), strength));
+            modMain->addInstance("door1", glm::mat4()), strength));
 
         btHingeConstraint* hinge = new btHingeConstraint (*body, btVector3(0,0,0), btVector3(0,1,0), false);
         hinge->setLimit (low, high, 0.01f,1.f,-0.001f);
@@ -512,7 +517,7 @@ public:
                 btTransform(btQuaternion(0, 0, 0, 1), pos);
 
         guides.push_back({addRigidBody (shape, 0x02,0x01, 0., 0.01),
-            models.object.addInstance("guides", btTransformToGlmMat(tr))});
+            modMain->addInstance("guides", btTransformToGlmMat(tr))});
 
         guides[idx].body->setWorldTransform (tr);
 
@@ -550,11 +555,11 @@ public:
 
         addRigidBody (getConvexHullShape(modBodies, "damp-left-lp"), 0x02,0x01, 0., 0.1)
                 ->setUserIndex(DAMP_BDY_ID);
-        models.object.addInstance("left_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+        modMain->addInstance("left_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
 
         addRigidBody (getConvexHullShape(modBodies, "damp-right-lp"), 0x02,0x01, 0., 0.1)
                 ->setUserIndex(DAMP_BDY_ID);
-        models.object.addInstance("right_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+        modMain->addInstance("right_damper", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
 
         for (int i = 0; i<modBodies.primitives.size() ; i++) {
             switch (str2int(modBodies.primitives[i].name.c_str())) {
@@ -567,7 +572,7 @@ public:
                             slopeRotMatrix * btTransform(btQuaternion(btVector3(0,0,1), M_PI), btVector3(0.09194,0.01479,0.39887)));
 
                 flippers.push_back({body,
-                    models.object.addInstance("flip", glm::mat4(1.0))});
+                    modMain->addInstance("flip", glm::mat4(1.0))});
 
                 hinge = new btHingeConstraint(*body, btVector3(0,0,0), vUp, false);
                 hinge->setLimit (M_PI - 0.6, M_PI + 0.5, 0.001f, 1.0f, -0.001f);
@@ -578,7 +583,7 @@ public:
                             btTransform(btQuaternion(0, 0, 0, 1), btVector3(-0.09194,0.01479,0.39887)));
 
                 flippers.push_back({body,
-                    models.object.addInstance("flip", glm::mat4(1.0))});
+                    modMain->addInstance("flip", glm::mat4(1.0))});
 
                 hinge = new btHingeConstraint (*body, btVector3(0,0,0), vUp, false);
                 hinge->setLimit (-0.5, 0.6, .001f,1.0f,-0.001f);
@@ -591,7 +596,7 @@ public:
                             btTransform(btQuaternion(0, 0, 0, 1), btVector3(-0.22988,0.01479,-0.07538)));
 
                 flippers.push_back({body,
-                    models.object.addInstance("flip", glm::mat4(1.0))});
+                    modMain->addInstance("flip", glm::mat4(1.0))});
 
                 hinge = new btHingeConstraint (*body, btVector3(0,0,0), vUp, false);
                 hinge->setLimit (-1.20, 0., .001f,1.0f,-0.001f);
@@ -624,7 +629,7 @@ public:
                     body->setUserIndex(BUMP_BDY_ID);
                     body->setWorldTransform (trBody);
                     bumpers.push_back({body,
-                        models.object.addInstance("bumper", btTransformToGlmMat(trBody))});
+                        modMain->addInstance("bumper", btTransformToGlmMat(trBody))});
                 }
                 break;
             }
@@ -639,8 +644,8 @@ public:
                 body->setUserIndex2(1);
 
                 spinners.push_back({body,
-                    models.object.addInstance("spinner-hr", btTransformToGlmMat(trBody))});
-                models.object.addInstance("spinnerBord", btTransformToGlmMat(trBody));
+                    modMain->addInstance("spinner-hr", btTransformToGlmMat(trBody))});
+                modMain->addInstance("spinnerBord", btTransformToGlmMat(trBody));
 
                 hinge = new btHingeConstraint (*body, btVector3(0,0.006,0), btVector3(1,0,0), false);
                 hinge->setLimit (0., 2 * M_PI, 0.1f, 0.f,-1.0f);
@@ -654,7 +659,7 @@ public:
                 for (int i = 0; i < 4; i++)
                     leftTargets.targets.push_back(
                                 Target(addRigidBody (shape, 0x02,0x01, 0.5, 0.1),
-                                models.object.addInstance("target1", glm::mat4()),leftTarget_points * i));
+                                modMain->addInstance("target1", glm::mat4()),leftTarget_points * i));
 
 
 
@@ -663,10 +668,10 @@ public:
                 for (int i = 0; i < 4; i++)
                     rightTargets.targets.push_back(
                                 Target(addRigidBody (shape, 0x02,0x01, 0.5, 0.1),
-                                models.object.addInstance("target1", glm::mat4()),leftTarget_points * i));
+                                modMain->addInstance("target1", glm::mat4()),leftTarget_points * i));
 
-                leftTargets.createBodies(models.object);
-                rightTargets.createBodies(models.object);
+                leftTargets.createBodies(modMain);
+                rightTargets.createBodies(modMain);
 
                 break;
             default:
@@ -692,7 +697,7 @@ public:
             body->setCcdSweptSphereRadius  (ballSize * 0.1f);
 
             balls.push_back({body,
-                models.object.addInstance("ball", glm::mat4(1.0))});
+                modMain->addInstance("ball", glm::mat4(1.0))});
         }
     }
 
@@ -753,27 +758,27 @@ public:
         btTransform trans;
         for (int i=0; i<doors.size(); i++) {
             doors[i].body->getMotionState()->getWorldTransform(trans);
-            models.object.instanceDatas[doors[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
+            modMain->instanceDatas[doors[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
         }
         for (int i=0; i < balls.size(); i++) {
             balls[i].body->getMotionState()->getWorldTransform(trans);
-            models.object.instanceDatas[balls[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
+            modMain->instanceDatas[balls[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
         }
         for (int i=0; i < flippers.size(); i++) {
             flippers[i].body->getMotionState()->getWorldTransform(trans);
-            models.object.instanceDatas[flippers[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
+            modMain->instanceDatas[flippers[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
         }
         for (int i=0; i < spinners.size(); i++) {
             spinners[i].body->getMotionState()->getWorldTransform(trans);
-            models.object.instanceDatas[spinners[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
+            modMain->instanceDatas[spinners[i].instanceIdx].modelMat = btTransformToGlmMat(trans);
         }
 
         //scale top left flipper
-        models.object.instanceDatas[flippers[2].instanceIdx].modelMat =
-                models.object.instanceDatas[flippers[2].instanceIdx].modelMat *
+        modMain->instanceDatas[flippers[2].instanceIdx].modelMat =
+                modMain->instanceDatas[flippers[2].instanceIdx].modelMat *
                 glm::scale(glm::mat4(1.0), glm::vec3(0.92,0.92,0.92));
 
-        models.object.updateInstancesBuffer();
+        modMain->updateInstancesBuffer();
     }
 
     void step_physics () {
@@ -949,8 +954,9 @@ public:
             balls[0].body->setLinearVelocity(btVector3(0,0,0));
             break;
         case 87://1
-            balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(-0.11,0.02,0.22)));
-            balls[0].body->setLinearVelocity(btVector3(0,0,0));
+            //balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(-0.11,0.02,0.22)));
+            //balls[0].body->setLinearVelocity(btVector3(0,0,0));
+            plateLights[10]->toogle();;
             break;
         case 88:
             balls[0].body->setWorldTransform(btTransform(btQuaternion(0, 0, 0, 1), btVector3(0.,0.02,0.)));
@@ -1029,7 +1035,7 @@ void check_collisions (btDynamicsWorld *dynamicsWorld, void *app) {
                 obj->setActivationState(DISABLE_SIMULATION);
                 tg->targets[targ].state = true;
 
-                vkapp->models.object.instanceDatas[tg->targets[targ].instanceIdx].modelMat *=
+                vkapp->modMain->instanceDatas[tg->targets[targ].instanceIdx].modelMat *=
                         glm::translate (glm::mat4(), glm::vec3(0,+0.2,0));
 
                 tg->reachedTargetCount++;

@@ -21,6 +21,7 @@ struct Material {
 	uint pad1;
 	uint pad2;
 	uint pad3;
+	vec4 emissiveFactor;
 };
 // Scene bindings
 
@@ -209,8 +210,9 @@ void main()
 	// Gamma correction
 	color = pow(color, vec3(1.0f / uboParams.gamma));
 
+	vec3 emissive = uboMat.mats[inMatIdx].emissiveFactor.rgb;
 	if (uboMat.mats[inMatIdx].emissiveTexture > .0f) {
-		vec3 emissive = texture(maps, vec3(inUV, uboMat.mats[inMatIdx].emissiveTexture - 1)).rgb;// * u_EmissiveFactor;
+		emissive *= texture(maps, vec3(inUV, uboMat.mats[inMatIdx].emissiveTexture - 1)).rgb;// * u_EmissiveFactor;
 		color += emissive;
 	}
 

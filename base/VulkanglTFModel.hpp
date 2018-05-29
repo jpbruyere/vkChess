@@ -18,6 +18,7 @@
 #include "vulkan/vulkan.h"
 #include "VulkanDevice.hpp"
 #include "texture.hpp"
+#include "../src/vkrenderer.h"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -44,6 +45,7 @@ namespace vkglTF
 
     struct Material {
         glm::vec4 baseColorFactor = glm::vec4(1.0f);
+
         AlphaMode alphaMode = ALPHAMODE_OPAQUE;
         float alphaCutoff = 1.0f;
         float metallicFactor = 1.0f;
@@ -58,6 +60,8 @@ namespace vkglTF
         uint32_t pad1;
         uint32_t pad2;
         uint32_t pad3;
+
+        glm::vec4 emissiveFactor = glm::vec4(0.0f);
     };
 
     struct Dimension
@@ -89,7 +93,8 @@ namespace vkglTF
         glTF model loading and rendering class
     */
     struct Model {
-        uint32_t textureSize = 1024; //texture array size w/h
+        bool        prepared    = false;
+        uint32_t    textureSize = 1024; //texture array size w/h
 
         struct Vertex {
             glm::vec3 pos;
@@ -101,26 +106,27 @@ namespace vkglTF
 
         //vertices list are kept for meshLoading only (usefull for bullet lowpoly meshes without texture or material
         //their are cleared for normal loading
-        std::vector<uint32_t> indexBuffer;
-        std::vector<Vertex> vertexBuffer;
+        std::vector<uint32_t>       indexBuffer;
+        std::vector<Vertex>         vertexBuffer;
+        std::vector<vks::Texture>   textures;
+        std::vector<Material>       materials;
+        std::map<std::string, int>  materialsNames;
+        std::vector<uint32_t>       instances;
+        std::vector<InstanceData>   instanceDatas;
 
-        vks::Buffer vertices;
-        vks::Buffer indices;
-        vks::Buffer instancesBuff;
-        vks::Buffer materialsBuff;
-        vks::Texture*    texArray = NULL;
+        vks::Buffer     vertices;
+        vks::Buffer     indices;
+        vks::Buffer     instancesBuff;
+        vks::Buffer     materialsBuff;
+
+        vks::Texture*   texArray        = NULL;
+        VkDescriptorSet descriptorSet   = VK_NULL_HANDLE;
 
         std::vector<Primitive> primitives;
 
-        std::vector<vks::Texture>       textures;
-        std::vector<Material>           materials;
-        std::map<std::string, int>      materialsNames;
-        std::vector<uint32_t>           instances;
-        std::vector<InstanceData>       instanceDatas;
-        //std::vector<VkDescriptorSet>    descriptorSets;
-
         void destroy()
         {
+            prepared = false;
             vertices.destroy();
             indices.destroy();
             instancesBuff.destroy();
@@ -343,9 +349,7 @@ namespace vkglTF
             for (tinygltf::Material &mat : gltfModel.materials) {
                 vkglTF::Material material = {};
                 if (mat.values.find("baseColorFactor") != mat.values.end()) {
-                    tinygltf::ColorValue c = mat.values["baseColorFactor"].ColorFactor();
-                    for (int i=0; i<c.size(); i++)
-                        material.baseColorFactor[i] = static_cast<float>(c[i]);
+                    material.baseColorFactor = glm::make_vec4(mat.values["baseColorFactor"].ColorFactor().data());
                 }
                 if (mat.values.find("baseColorTexture") != mat.values.end()) {
                     material.baseColorTexture = gltfModel.textures[mat.values["baseColorTexture"].TextureIndex()].source + 1;
@@ -353,18 +357,25 @@ namespace vkglTF
                 if (mat.values.find("metallicRoughnessTexture") != mat.values.end()) {
                     material.metallicRoughnessTexture = gltfModel.textures[mat.values["metallicRoughnessTexture"].TextureIndex()].source + 1;
                 }
-                if (mat.values.find("roughnessFactor") != mat.values.end()) {
+                if (mat.values.find("roughnessFactor") != mat.values.end())
                     material.roughnessFactor = static_cast<float>(mat.values["roughnessFactor"].Factor());
-                }
-                if (mat.values.find("metallicFactor") != mat.values.end()) {
+
+                if (mat.values.find("metallicFactor") != mat.values.end())
                     material.metallicFactor = static_cast<float>(mat.values["metallicFactor"].Factor());
-                }
                 if (mat.additionalValues.find("normalTexture") != mat.additionalValues.end()) {
                     material.normalTexture = gltfModel.textures[mat.additionalValues["normalTexture"].TextureIndex()].source + 1;
                 }
                 if (mat.additionalValues.find("emissiveTexture") != mat.additionalValues.end()) {
                     material.emissiveTexture = gltfModel.textures[mat.additionalValues["emissiveTexture"].TextureIndex()].source + 1;
+                    material.emissiveFactor = glm::vec4(1.0f);
                 }
+                //emissive factor has boolean_value here (blender export or tinygltf error???
+                /*if (mat.additionalValues.find("emissiveFactor") != mat.values.end()){
+                    tinygltf::Parameter pm = mat.additionalValues["emissiveFactor"];
+                    if (pm.bool_value);
+                        material.emissiveFactor = glm::make_vec3(pm.ColorFactor().data());
+                }*/
+
                 if (mat.additionalValues.find("occlusionTexture") != mat.additionalValues.end()) {
                     material.occlusionTexture = gltfModel.textures[mat.additionalValues["occlusionTexture"].TextureIndex()].source + 1;
                 }
@@ -493,6 +504,8 @@ namespace vkglTF
 
             vertexBuffer.clear();
             indexBuffer.clear();
+
+            prepared = true;
         }
         void addOneInstanceOfEach () {
             for (int i=0; i<primitives.size(); i++) {
@@ -523,34 +536,50 @@ namespace vkglTF
             std::map<std::string, int>::iterator it = materialsNames.find(_name);
             return it == materialsNames.end() ? -1 : it->second;
         }
-        void buildCommandBuffer(VkCommandBuffer cmdBuff, bool drawInstanced = false){
+        void allocateDescriptorSet (VkDescriptorPool descPool, VkDescriptorSetLayout dsLayout) {
+            VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+            descriptorSetAllocInfo.descriptorPool   = descPool;
+            descriptorSetAllocInfo.pSetLayouts      = &dsLayout;
+            descriptorSetAllocInfo.descriptorSetCount = 1;
+            VK_CHECK_RESULT(vkAllocateDescriptorSets(device->logicalDevice, &descriptorSetAllocInfo, &descriptorSet));
 
+            std::array<VkWriteDescriptorSet, 2> writeDescriptorSets{
+                createWriteDS (descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &texArray->descriptor),
+                createWriteDS (descriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,         &materialsBuff.descriptor),
+            };
+
+            vkUpdateDescriptorSets(device->logicalDevice, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+        }
+        void buildCommandBuffer(VkCommandBuffer cmdBuff, VkPipelineLayout pipelineLayout){
+            if (!prepared)
+                return;
             VkDeviceSize offsets[1] = { 0 };
+
+            if (descriptorSet)
+                vkCmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &descriptorSet, 0, NULL);
 
             vkCmdBindVertexBuffers(cmdBuff, 0, 1, &vertices.buffer, offsets);
             vkCmdBindIndexBuffer(cmdBuff, indices.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-            if (!drawInstanced) {
+            if (instances.empty()) {
                 for (auto primitive : primitives)
                     vkCmdDrawIndexed(cmdBuff, primitive.indexCount, 1, primitive.vertexBase, 0, 0);
                 return;
             }
 
+            //instance buffer
             vkCmdBindVertexBuffers(cmdBuff, 1, 1, &instancesBuff.buffer, offsets);
 
-            //uint32_t modIdx = instances[0].modelIndex;
             uint32_t partIdx = instances[0];
             uint32_t instCount = 0;
             uint32_t instOffset = 0;
 
             for (int i = 0; i < instances.size(); i++){
-                //if (modIdx != instances[i].modelIndex || partIdx != instances[i].partIndex) {
                 if (partIdx != instances[i]) {
                     vkCmdDrawIndexed(cmdBuff,	primitives[partIdx].indexCount, instCount,
                                                 primitives[partIdx].indexBase,
                                                 primitives[partIdx].vertexBase, instOffset);
 
-                    //modIdx = instances[i].modelIndex;
                     partIdx = instances[i];
                     instCount = 0;
                     instOffset = i;

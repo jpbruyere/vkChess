@@ -106,7 +106,6 @@ protected:
     std::vector<VkCommandBuffer> drawCmdBuffers;
     VkRenderPass renderPass;
     std::vector<VkFramebuffer>frameBuffers;
-    VkDescriptorPool descriptorPool;
     VkPipelineCache pipelineCache;
     VulkanSwapChain swapChain;
     VkSemaphore presentCompleteSemaphore;
