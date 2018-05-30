@@ -51,6 +51,7 @@ public:
         glm::ivec2  initPosition;
         float       yAngle;
         bool        captured;
+        bool        hasMoved;
 
         uint32_t    instance;
     };
@@ -68,8 +69,8 @@ public:
         camera.movementSpeed = 8.0f;
         camera.setPerspective(70.0f, (float)width / (float)height, 0.1f, 50.0f);
         camera.rotationSpeed = 0.25f;
-        camera.setRotation({ 32.0f, 0.0f, 0.0f });
-        camera.setPosition({ .05f, -6.31f, -10.85f });
+        camera.setRotation({ 42.0f, 0.0f, 0.0f });
+        camera.setPosition({ .0f, -7.2f, -10.f });
 
         settings.validation = true;
     }
@@ -79,14 +80,16 @@ public:
 
     }
 
-    const glm::vec4 hoverColor = glm::vec4(0.0,0.0,0.3,1.0);
-    const glm::vec4 selectedColor = glm::vec4(0.2,0.0,0.0,1.0);
-    const glm::vec4 validMoveColor = glm::vec4(0.0,0.5,0.0,1.0);
+    const glm::vec4 hoverColor = glm::vec4(0.0,0.0,0.05,1.0);
+    const glm::vec4 selectedColor = glm::vec4(0.,0.0,0.1,1.0);
+    const glm::vec4 validMoveColor = glm::vec4(0.0,0.,0.2,1.0);
+    const glm::vec4 bestMoveColor = glm::vec4(0.0,0.2,0.0,1.0);
 
     Color currentPlayer = White;
     bool gameStarted = false;
-    bool playerIsAi[2] = {true,true};
+    bool playerIsAi[2] = {false,true};
     Piece pieces[32];
+    Piece* board[8][8] = {};
 
     int cptWhiteOut = 0;
     int cptBlackOut = 0;
@@ -94,8 +97,8 @@ public:
     const int animSteps = 200;
     std::vector <animation> animations;
 
-    glm::ivec2 bestMoveOrig;
-    glm::ivec2 bestMoveTarget;
+    glm::ivec2 bestMoveOrig = glm::ivec2(-1,-1);
+    glm::ivec2 bestMoveTarget = glm::ivec2(-1,-1);
 
     glm::ivec2 hoverSquare = glm::ivec2(-1,-1);
     glm::ivec2 selectedSquare = glm::ivec2(-1,-1);
@@ -103,14 +106,14 @@ public:
     //stockfish
     bool stockFishIsReady = false;
     bool hint = false;
-    uint8_t level[2] = {20,20};
+    uint8_t level[2] = {20,0};
     char* nextCommand;
     int sfPid, sfReadfd, sfWritefd;
 
     char sfOutBuff[1024];
     int sfOutBuffPtr=0;
 
-    const char* sfcmdGo = "go movetime 100\n";
+    const char* sfcmdGo = "go movetime 400\n";
     const char* initPosCmd = "position startpos moves ";
     char movesBuffer[40000];
     int previouMovesPtr;
@@ -269,9 +272,16 @@ public:
                 ptr++;
             ptr+=4;
 
-            //bestMoveOrig = {lineBuf[ptr]-97, lineBuf[ptr+1]-49};
-            //bestMoveTarget = {lineBuf[ptr+2]-97, lineBuf[ptr+3]-49};
-            //uboDirty = true;
+            if (bestMoveOrig.x >=0){
+                subCaseLight(bestMoveOrig, bestMoveColor);
+                subCaseLight(bestMoveTarget, bestMoveColor);
+            }
+            bestMoveOrig = glm::ivec2(lineBuf[ptr]-97, lineBuf[ptr+1]-49);
+            bestMoveTarget = glm::ivec2(lineBuf[ptr+2]-97, lineBuf[ptr+3]-49);
+            if (bestMoveOrig.x >=0){
+                addCaseLight(bestMoveOrig, bestMoveColor);
+                addCaseLight(bestMoveTarget, bestMoveColor);
+            }
 
         }else if (strncmp (lineBuf, "bestmove", 8)==0){
             glm::ivec2 orig = glm::ivec2(lineBuf[9]-97, lineBuf[10]-49);//{};
@@ -339,67 +349,310 @@ public:
             _exit(0);
         }
     }
-
-    void processMove (glm::ivec2 orig, glm::ivec2 dest) {
-        Piece* p = getPiece(orig);
-        Piece* pDest = getPiece(dest);
-        if (p) {
-            p->position = dest;
-            animatePce (p->instance, (float)dest.x,(float)dest.y);
-            if (pDest) {
-                if (pDest->color != p->color) {
-                    if (pDest->color == White){
-                        pDest->position = glm::ivec2(-2 - cptWhiteOut / CAPTURE_ZONE_HEIGHT, 7 - cptWhiteOut % CAPTURE_ZONE_HEIGHT);
-                        cptWhiteOut ++;
-                    }else{
-                        pDest->position = glm::ivec2(9 + cptBlackOut / CAPTURE_ZONE_HEIGHT, 7 - cptBlackOut % CAPTURE_ZONE_HEIGHT);
-                        cptBlackOut ++;
-                    }
-
-                    animatePce (pDest->instance, (float)pDest->position.x,(float)pDest->position.y);
-                }
-            }
+    //actualize board[][] array
+    void boardMove (Piece* pce, glm::ivec2 newPos, bool animate = false) {
+        if (!pce->captured)
+            board[pce->position.x][pce->position.y] = nullptr;
+        board[newPos.x][newPos.y] = pce;
+        pce->position = newPos;
+        pce->hasMoved = true;
+        if (animate)
+            animatePce (pce->instance, (float)newPos.x,(float)newPos.y);
+    }
+    void capturePce (Piece* p, bool animate = false) {
+        board[p->position.x][p->position.y] = nullptr;
+        if (p->color == White){
+            p->position = glm::ivec2(-2 - cptWhiteOut / CAPTURE_ZONE_HEIGHT, 7 - cptWhiteOut % CAPTURE_ZONE_HEIGHT);
+            p->captured = true;
+            cptWhiteOut ++;
+        }else{
+            p->position = glm::ivec2(9 + cptBlackOut / CAPTURE_ZONE_HEIGHT, 7 - cptBlackOut % CAPTURE_ZONE_HEIGHT);
+            cptBlackOut ++;
         }
-        /*if (IS_TYPE(pce,Type::King) && abs(orig.col - dest.col)>1){//rocking
-            if (dest.col == 2)
-                animatePce (16+(pce>>7)*2, 3.f, (float)dest.row);
-            else
-                animatePce (17+(pce>>7)*2, 5.f, (float)dest.row);
-        }else if (targetPce > 0) {//pce on target case taken
-            if (targetPce & 0x80){//black
-                animatePce (getPceUboIdx(targetPce), 8.f, 7 - 0.7f * cptBlackOut);
-                cptBlackOut++;
-            }else{
-                animatePce (getPceUboIdx(targetPce), -1.f, 0.7f * cptBlackOut);
-                cptWhiteOut++;
-            }
-        }else if (IS_TYPE(pce, Type::Pawn) && orig.col != dest.col) {
-            targetPce = board[dest.col][orig.row];
-            if (targetPce & 0x80){//black
-                animatePce (getPceUboIdx(targetPce), 8.f, 7 - 0.7f * cptBlackOut);
-                cptBlackOut++;
-            }else{
-                animatePce (getPceUboIdx(targetPce), -1.f, 0.7f * cptBlackOut);
-                cptWhiteOut++;
-            }
-        }*/
+        if (animate)
+            animatePce (p->instance, (float)p->position.x,(float)p->position.y);
+    }
+
+    void processMove (glm::ivec2 orig, glm::ivec2 dest, bool animate = true) {
+        if (orig == dest)
+            return;
+        Piece* p    = getPiece(orig);
+        Piece* pDest= getPiece(dest);
+
+        if (p) {
+            if (p->type == King && abs(orig.x - dest.x)>1){//rocking
+                //move tower
+                if (dest.x == 6)//right tower
+                    boardMove(board[7][dest.y], glm::ivec2(5,dest.y), animate);
+                else
+                    boardMove(board[0][dest.y], glm::ivec2(3,dest.y), animate);
+            }else if (pDest) {//capture
+                if (pDest->color != p->color)
+                    capturePce (pDest, animate);
+                else {
+                    std::cerr << "Unexpected Piece on case: (" << dest.x << "," << dest.y << ")" << std::endl;
+                    exit(-1);
+                }
+            }else if (p->type == Pawn && orig.x != dest.x) //prise en passant
+                capturePce (board[dest.x][orig.y], animate);
+            //normal move
+            boardMove(board[orig.x][orig.y], dest, animate);
+        }
 
         previouMovesPtr = movesPtr;
-        movesBuffer[movesPtr++]=orig.x + 97;
+        movesBuffer[movesPtr++]=orig.x + 97;//ascii pos
         movesBuffer[movesPtr++]=orig.y + 49;
         movesBuffer[movesPtr++]=dest.x + 97;
         movesBuffer[movesPtr++]=dest.y + 49;
-        movesBuffer[movesPtr++]=0x20;
+        movesBuffer[movesPtr++]=0x20;//space
+    }
 
-        //boardMove(orig,dest);
+    bool validateMoves (Piece* p) {
+        std::vector<glm::ivec2> moves = validMoves;
+
+        std::vector<glm::ivec2>::iterator itr = moves.begin();
+        for ( ; itr != moves.end(); ) {
+            if (!PreviewBoard(p, *itr))
+                itr = moves.erase(itr);
+             else
+                ++itr;
+        }
+        validMoves = moves;
+    }
+    bool kingIsSafe(Color player){
+        Piece* k = (player==White)? &pieces[4] : &pieces[20];
+
+        int pStartOffset = (k->color == White)?16:0;//we check moves of opponent
+        for (int pIdx=pStartOffset; pIdx<pStartOffset+16; pIdx++) {
+            validMoves.clear();
+            computeValidMove(&pieces[pIdx]);
+            if (std::find(validMoves.begin(), validMoves.end(), k->position)!=validMoves.end())
+                return false;
+        }
+
+        return true;
+    }
+
+    bool PreviewBoard(Piece* p, glm::ivec2 newPos){
+        std::vector<glm::ivec2> saveCurrentValidMoves = validMoves;
+        Piece savedPces[32] = {};
+        memcpy (savedPces, pieces, 32*sizeof(Piece));
+        Piece* savedBoard[8][8] = {};
+        memcpy (savedBoard, board, 64*sizeof(Piece*));
+
+        processMove (p->position, newPos, false);
+
+        bool kingOk = kingIsSafe(p->color);
+
+        previouMovesPtr-=5;
+        movesPtr-=5;
+        memcpy (pieces, savedPces, 32*sizeof(Piece));
+        memcpy (board, savedBoard, 64*sizeof(Piece*));
+        validMoves = saveCurrentValidMoves;
+
+        return kingOk;
+    }
+
+
+    std::vector<glm::ivec2> validMoves;
+
+    void checkSingleMove (Piece* p, int deltaX, int deltaY) {
+        glm::ivec2 delta = glm::ivec2(deltaX, deltaY);
+        glm::ivec2 newPos = p->position + delta;
+
+        if (newPos.x < 0 || newPos.x > 7 || newPos.y < 0 || newPos.y > 7)
+            return;
+
+        Piece* target = board[newPos.x][newPos.y];
+
+        if (!target) {//target cell is empty
+            if (p->type == Pawn){//current cell is pawn
+                if (delta.x != 0){//check En passant capturing
+                    if (previouMovesPtr<24)
+                        return;
+                    target = board[newPos.x][p->position.y];
+                    if (!target)
+                        return;
+                    if (target->color == p->color || p->type != Pawn)
+                        return;
+                    if (p->color == Black) {
+                        if (newPos.y != 3)
+                            return;
+                        if ((movesBuffer[previouMovesPtr]-97 != newPos.x) ||
+                                (movesBuffer[previouMovesPtr+2]-97 != newPos.x) ||//not a straight move asside
+                                (movesBuffer[previouMovesPtr+1]-49 != 1) ||
+                                (movesBuffer[previouMovesPtr+3]-49 != 3))
+                            return;
+                    }else{
+                        if (newPos.y != 4)
+                            return;
+                        if ((movesBuffer[previouMovesPtr]-97 != newPos.x) ||
+                                (movesBuffer[previouMovesPtr+2]-97 != newPos.x) ||//not a straight move asside
+                                (movesBuffer[previouMovesPtr+1]-49 != 6) ||
+                                (movesBuffer[previouMovesPtr+3]-49 != 4))
+                            return;
+                    }
+                //check pawn promotion
+                /*int promoteRow = 7;
+                if (pce&0x80)//black
+                    promoteRow = 0;
+                if (row ==  promoteRow){
+                    string basicPawnMove = getChessCell (pos.col, pos.raw) + getChessCell (col, row);
+                    return new string[] {
+                        basicPawnMove + "q",
+                        basicPawnMove + "k",
+                        basicPawnMove + "r",
+                        basicPawnMove + "b"
+                    };
+                    */
+                }
+            }
+            validMoves.push_back(newPos);
+            return;
+        }else if (p->color == target->color)//target cell is not empty
+            return;
+        else if (p->type == Pawn && deltaX == 0)//pawn cant take forward
+            return;
+
+    //    if (Board [col, row].Type == PieceType.King)
+    //        return new string[] { getChessCell (pos.X, pos.Y) + getChessCell (col, row) + "K"};
+
+    //    if (board [pos.X, pos.Y].Type == PieceType.Pawn &&
+    //        row ==  Board [pos.X, pos.Y].Player.PawnPromotionY){
+    //        string basicPawnMove = getChessCell (pos.X, pos.Y) + getChessCell (col, row);
+    //        return new string[] {
+    //            basicPawnMove + "q",
+    //            basicPawnMove + "k",
+    //            basicPawnMove + "r",
+    //            basicPawnMove + "b"
+    //        };
+    //    }
+
+        validMoves.push_back(newPos);
+    }
+    void checkIncrementalMove (Piece* p, int deltaX, int deltaY){
+        glm::ivec2 delta = glm::ivec2(deltaX, deltaY);
+        glm::ivec2 newPos = p->position + delta;
+
+        while (newPos.x >= 0 && newPos.x < 8 && newPos.y >= 0 && newPos.y < 8){
+            Piece* target = board[newPos.x][newPos.y];
+            if (target) {
+                if (target->color != p->color)
+                    validMoves.push_back(newPos);
+                break;
+            }
+            validMoves.push_back(newPos);
+            newPos += delta;
+        }
+    }
+
+    void checkCastling (Piece* k) {
+        if (k->hasMoved)
+            return;
+        bool castlingOk = true;
+        int pceOffset = (k->color == Black) ? 16 : 0;
+        //TODO: check king is safe on rook position
+
+        //castling long
+        for (int i=k->position.x-1; i>0; i--){
+            if (board[i][k->position.y]){
+                castlingOk=false;
+                break;
+            }
+            if (!PreviewBoard(k, glm::ivec2(i, k->position.y))){
+                castlingOk=false;
+                break;
+            }
+        }
+        if (castlingOk && !pieces[pceOffset].hasMoved)
+            validMoves.push_back(glm::ivec2(k->position.x-2,k->position.y));
+
+        //castling short
+        castlingOk = true;
+        for (int i=k->position.x+1; i<7;i++){
+            if (board[i][k->position.y]){
+                castlingOk=false;
+                break;
+            }
+            if (!PreviewBoard(k, glm::ivec2(i, k->position.y))){
+                castlingOk=false;
+                break;
+            }
+        }
+        if (castlingOk && !pieces[7+pceOffset].hasMoved)
+            validMoves.push_back(glm::ivec2(k->position.x+2,k->position.y));
+    }
+    void computeValidMove(Piece* p){
+        if (p->captured)
+            return;
+
+        int validMoveStart = validMoves.size();
+
+        if (p->type == Pawn) {
+            int pawnDirection = (p->color == White)? 1 : -1;
+            checkSingleMove (p, 0, 1 * pawnDirection);
+            if (!p->hasMoved)
+                checkSingleMove (p, 0, 2 * pawnDirection);
+            checkSingleMove (p,-1, 1 * pawnDirection);
+            checkSingleMove (p, 1, 1 * pawnDirection);
+        }else if (p->type == Rook) {
+            checkIncrementalMove (p, 0, 1);
+            checkIncrementalMove (p, 0,-1);
+            checkIncrementalMove (p, 1, 0);
+            checkIncrementalMove (p,-1, 0);
+        }else if (p->type == Knight) {
+            checkSingleMove (p, 2, 1);
+            checkSingleMove (p, 2,-1);
+            checkSingleMove (p,-2, 1);
+            checkSingleMove (p,-2,-1);
+            checkSingleMove (p, 1, 2);
+            checkSingleMove (p,-1, 2);
+            checkSingleMove (p, 1,-2);
+            checkSingleMove (p,-1,-2);
+        }else if (p->type == Bishop) {
+            checkIncrementalMove (p, 1, 1);
+            checkIncrementalMove (p,-1,-1);
+            checkIncrementalMove (p, 1,-1);
+            checkIncrementalMove (p,-1, 1);
+        }else if (p->type == Queen) {
+            checkIncrementalMove (p, 0, 1);
+            checkIncrementalMove (p, 0,-1);
+            checkIncrementalMove (p, 1, 0);
+            checkIncrementalMove (p,-1, 0);
+            checkIncrementalMove (p, 1, 1);
+            checkIncrementalMove (p,-1,-1);
+            checkIncrementalMove (p, 1,-1);
+            checkIncrementalMove (p,-1, 1);
+        }else if (p->type == King){
+            checkCastling   (p);
+
+            checkSingleMove (p,-1,-1);
+            checkSingleMove (p,-1, 0);
+            checkSingleMove (p,-1, 1);
+            checkSingleMove (p, 0,-1);
+            checkSingleMove (p, 0, 1);
+            checkSingleMove (p, 1,-1);
+            checkSingleMove (p, 1, 0);
+            checkSingleMove (p, 1, 1);
+        }
     }
 
     void startGame () {
         currentPlayer = White;
         cptWhiteOut = cptBlackOut = 0;
 
+        for (int i=0; i<32; i++) {
+            Piece* p = &pieces[i];
+            if (p->position != p->initPosition)
+                boardMove (p, p->initPosition, true);
+            p->captured = false;
+            p->hasMoved = false;
+        }
+
         strncpy(movesBuffer, "position startpos moves ", 24);
         movesPtr = previouMovesPtr = 24;
+
+        enableHint();
     }
     void switchPlayer () {
         if (currentPlayer==White)
@@ -410,6 +663,21 @@ public:
         startTurn();
     }
     void startTurn (){
+        if (selectedSquare.x >= 0)
+            subCaseLight(selectedSquare, selectedColor);
+        if (hoverSquare.x >= 0)
+            subCaseLight(hoverSquare, hoverColor);
+        if (bestMoveOrig.x >=0){
+            subCaseLight(bestMoveOrig, bestMoveColor);
+            subCaseLight(bestMoveTarget, bestMoveColor);
+        }
+
+        hoverSquare = selectedSquare = bestMoveOrig = bestMoveTarget = glm::vec2(-1);
+
+        for (int i=0; i<validMoves.size(); i++)
+            subCaseLight(validMoves[i], validMoveColor);
+        validMoves.clear();
+
         if (playerIsAi[currentPlayer]){
             sendPositionsCmd();
             write(sfWritefd, sfcmdGo , strlen(sfcmdGo));
@@ -431,6 +699,7 @@ public:
                     glm::rotate(
                         glm::translate(glm::mat4(1.0), glm::vec3(x*2 - 7,0, 7 - y*2)),
                     yAngle, glm::vec3(0,1,0)));
+        board[x][y] = &pieces[pIdx];
         pIdx++;
     }
 
@@ -492,9 +761,6 @@ public:
 
         debugRenderer = new vkRenderer (vulkanDevice, &swapChain, depthFormat, settings.sampleCount,
                                                         frameBuffers, &sharedUBOs.matrices);
-
-
-
         startStockFish();
 
         if (getStockFishIsReady())
@@ -570,15 +836,43 @@ public:
         debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,0,1), glm::vec3(0,0,1));
         debugRenderer->flush();
 
+        if (hoverSquare == selectedSquare || hoverSquare.x <0)
+            return;
+
+        if (selectedSquare.x >= 0) {
+            Piece* p = board[selectedSquare.x][selectedSquare.y];
+            std::vector<glm::ivec2>::iterator pos = std::find(validMoves.begin(), validMoves.end(), hoverSquare);
+            if (pos!=validMoves.end()){
+                processMove(p->position, *pos);
+                if (hint)
+                    write(sfWritefd,"stop\n",5);
+                else
+                    switchPlayer();
+                return;
+            }
+        }
+
+        for (int i=0; i<validMoves.size(); i++)
+            subCaseLight(validMoves[i], validMoveColor);
+        validMoves.clear();
+
         if (selectedSquare.x >= 0)
             subCaseLight(selectedSquare, selectedColor);
 
         selectedSquare = hoverSquare;
 
-        if (selectedSquare.x >= 0)
+        if (selectedSquare.x >= 0) {
             addCaseLight(selectedSquare, selectedColor);
-
-
+            Piece* p = board[selectedSquare.x][selectedSquare.y];
+            if (!p)
+                return;
+            if (p->color != currentPlayer || playerIsAi[currentPlayer])
+                return;
+            computeValidMove (p);
+            validateMoves(p);
+            for (int i=0; i<validMoves.size(); i++)
+                addCaseLight(validMoves[i], validMoveColor);
+        }
     }
     virtual void handleMouseMove(int32_t x, int32_t y) {
         VulkanExampleBase::handleMouseMove(x, y);
