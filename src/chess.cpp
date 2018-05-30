@@ -79,6 +79,10 @@ public:
 
     }
 
+    const glm::vec4 hoverColor = glm::vec4(0.0,0.0,0.3,1.0);
+    const glm::vec4 selectedColor = glm::vec4(0.2,0.0,0.0,1.0);
+    const glm::vec4 validMoveColor = glm::vec4(0.0,0.5,0.0,1.0);
+
     Color currentPlayer = White;
     bool gameStarted = false;
     bool playerIsAi[2] = {true,true};
@@ -113,8 +117,8 @@ public:
     int movesPtr;
 
     void update(){
-        if (animations.empty())
-            return;
+//        if (animations.empty())
+//            return;
 
         readStockfishLine();
 
@@ -125,7 +129,8 @@ public:
             } else {
                 glm::mat4 a = itr->queue.front();
                 itr->queue.pop();
-                models2[0].instanceDatas[itr->uboIdx].modelMat = a;
+                mod->instanceDatas[itr->uboIdx].modelMat = a;
+                mod->setInstanceIsDirty(itr->uboIdx);
                 ++itr;
             }
         }
@@ -497,10 +502,20 @@ public:
 
         startGame();
     }
+    inline void addCaseLight (glm::ivec2 c, glm::vec4 color) {
+        addCaseLight(c.x, c.y, color);
+    }
+    inline void subCaseLight (glm::ivec2 c, glm::vec4 color) {
+        subCaseLight(c.x, c.y, color);
+    }
 
-
-    void setCaseLight (uint32_t x, uint32_t y, glm::vec4 color) {
-        mod->instanceDatas[casesInstances[x][y]].color = color;
+    void addCaseLight (uint32_t x, uint32_t y, glm::vec4 color) {
+        mod->instanceDatas[casesInstances[x][y]].color += color;
+        mod->setInstanceIsDirty(casesInstances[x][y]);
+    }
+    void subCaseLight (uint32_t x, uint32_t y, glm::vec4 color) {
+        mod->instanceDatas[casesInstances[x][y]].color -= color;
+        mod->setInstanceIsDirty(casesInstances[x][y]);
     }
 
     glm::vec3 vMouse, vMouseN;
@@ -555,20 +570,15 @@ public:
         debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,0,1), glm::vec3(0,0,1));
         debugRenderer->flush();
 
+        if (selectedSquare.x >= 0)
+            subCaseLight(selectedSquare, selectedColor);
+
         selectedSquare = hoverSquare;
 
-        Piece* p = getPiece(selectedSquare);
-        if (p){
-            if (p->color == currentPlayer && !playerIsAi[p->color]){
-                mod->instanceDatas[selInstanceIdx].modelMat =
-                        glm::translate(glm::mat4(1.0), glm::vec3(hoverSquare.x*2 - 7,0.1, 7-hoverSquare.y*2));
-                mod->updateInstancesBuffer();
-                return;
-            }
-        }
-        mod->instanceDatas[selInstanceIdx].modelMat =
-                glm::translate(glm::mat4(1.0), glm::vec3(0,-0.1, 0));
-        mod->updateInstancesBuffer();
+        if (selectedSquare.x >= 0)
+            addCaseLight(selectedSquare, selectedColor);
+
+
     }
     virtual void handleMouseMove(int32_t x, int32_t y) {
         VulkanExampleBase::handleMouseMove(x, y);
@@ -599,14 +609,13 @@ public:
             return;
 
         if (hoverSquare.x >= 0)
-            setCaseLight(hoverSquare.x, hoverSquare.y , glm::vec4(0));
+            subCaseLight(hoverSquare, hoverColor);
 
         hoverSquare = newPos;
 
         if (hoverSquare.x >= 0)
-            setCaseLight(hoverSquare.x, hoverSquare.y , glm::vec4(0.0,0.0,0.3,1.0));
+            addCaseLight(hoverSquare, hoverColor);
 
-        mod->updateInstancesBuffer();
     }
 
     void render () {

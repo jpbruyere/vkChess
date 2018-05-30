@@ -620,11 +620,30 @@ namespace vkglTF
                 instancesBuff.size));
 
             VK_CHECK_RESULT(instancesBuff.map());
+            minDirty = 0;
+            maxDirty = instanceDatas.size();
             updateInstancesBuffer();
         }
 
+        int minDirty = INT_MAX, maxDirty = 0;
+
+        void setInstanceIsDirty (uint32_t idx) {
+            if (idx < minDirty)
+                minDirty = idx;
+            if (idx > maxDirty)
+                maxDirty = idx;
+        }
+
         void updateInstancesBuffer(){
-            memcpy(instancesBuff.mapped, instanceDatas.data(), instanceDatas.size() * sizeof(InstanceData));
+            long count = maxDirty - minDirty + 1;
+            if (count > 0) {
+                size_t offset = minDirty * sizeof(InstanceData);
+                memcpy((char*)instancesBuff.mapped + offset,
+                       (char*)instanceDatas.data() + offset, count * sizeof(InstanceData));
+
+            }
+            minDirty = INT_MAX;
+            maxDirty = 0;
         }
         void updateMaterialBuffer(){
             memcpy(materialsBuff.mapped, materials.data(), sizeof(Material)*materials.size());
