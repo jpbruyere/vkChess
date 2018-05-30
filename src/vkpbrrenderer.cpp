@@ -30,7 +30,7 @@ vkPbrRenderer::~vkPbrRenderer() {
     models.skybox.destroy();
 
     sharedUBOs.matrices.destroy();
-    sharedUBOs.skybox.destroy();
+    //sharedUBOs.skybox.destroy();
     sharedUBOs.params.destroy();
 
     textures.environmentCube.destroy();
@@ -81,6 +81,7 @@ void vkPbrRenderer::buildCommandBuffers()
         vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
 
         vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &dsScene, 0, NULL);
+
         vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
 
         models.skybox.buildCommandBuffer(drawCmdBuffers[i], pipelineLayout);
@@ -90,9 +91,9 @@ void vkPbrRenderer::buildCommandBuffers()
         vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
         //for (m=0; m<models2.size(); m++)
         //    models2[m].buildCommandBuffer(drawCmdBuffers[i]);
-        models2[1].buildCommandBuffer(drawCmdBuffers[i], pipelineLayout);
+        //models2[1].buildCommandBuffer(drawCmdBuffers[i], pipelineLayout);
 
-        vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbrAlphaBlend);
+        //vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbrAlphaBlend);
         models2[0].buildCommandBuffer(drawCmdBuffers[i], pipelineLayout);
 
         // Transparent last
@@ -252,6 +253,7 @@ void vkPbrRenderer::preparePipelines()
         { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 20},
         { 6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 36},
         { 7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 52},
+        { 8, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 68}, //color for selection
     };
     VkPipelineVertexInputStateCreateInfo vertexInputStateCI = {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     vertexInputStateCI.vertexBindingDescriptionCount = 2;
@@ -1151,11 +1153,11 @@ void vkPbrRenderer::prepareUniformBuffers()
         sizeof(mvpMatrices)));
 
     // Skybox vertex shader uniform buffer
-    VK_CHECK_RESULT(vulkanDevice->createBuffer(
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &sharedUBOs.skybox,
-        sizeof(mvpMatrices)));
+//    VK_CHECK_RESULT(vulkanDevice->createBuffer(
+//        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+//        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+//        &sharedUBOs.skybox,
+//        sizeof(mvpMatrices)));
 
     // Shared parameter uniform buffer
     VK_CHECK_RESULT(vulkanDevice->createBuffer(
@@ -1165,7 +1167,7 @@ void vkPbrRenderer::prepareUniformBuffers()
         sizeof(lightingParams)));
 
     // Map persistent
-    sharedUBOs.skybox.map();
+    //sharedUBOs.skybox.map();
     sharedUBOs.matrices.map();
     sharedUBOs.params.map();
 
@@ -1178,14 +1180,9 @@ void vkPbrRenderer::updateUniformBuffers()
     // 3D object
     mvpMatrices.projection = camera.matrices.perspective;
     mvpMatrices.view = camera.matrices.view;
-    mvpMatrices.model = glm::mat4(1.0f);
-    mvpMatrices.model = glm::rotate(mvpMatrices.model, rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+    mvpMatrices.view3 = glm::mat4(glm::mat3(camera.matrices.view));
     mvpMatrices.camPos = camera.position * -1.0f;
     sharedUBOs.matrices.copyTo (&mvpMatrices, sizeof(mvpMatrices));
-
-    // Skybox
-    mvpMatrices.model = glm::mat4(glm::mat3(camera.matrices.view));
-    sharedUBOs.skybox.copyTo(&mvpMatrices, sizeof(mvpMatrices));
 }
 
 void vkPbrRenderer::updateParams()

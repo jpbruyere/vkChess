@@ -148,11 +148,11 @@ namespace vks
         {
             unmap();
 
+            if (memory)
+                vkFreeMemory(device, memory, nullptr);
             if (buffer)
                 vkDestroyBuffer(device, buffer, nullptr);
 
-            if (memory)
-                vkFreeMemory(device, memory, nullptr);
         }
 
     };

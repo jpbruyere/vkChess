@@ -31,13 +31,12 @@ public:
 
     struct UniformBuffers {
         vks::Buffer matrices;
-        vks::Buffer skybox;
         vks::Buffer params;
     } sharedUBOs;
 
     struct MVPMatrices {
         glm::mat4 projection;
-        glm::mat4 model;
+        glm::mat4 view3;
         glm::mat4 view;
         glm::vec3 camPos;
     } mvpMatrices;

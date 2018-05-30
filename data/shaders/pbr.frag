@@ -4,6 +4,7 @@ layout (location = 0) in vec3 inWorldPos;
 layout (location = 1) in vec3 inNormal;
 layout (location = 2) in vec2 inUV;
 layout (location = 3) flat in int inMatIdx;
+layout (location = 4) in vec4 inCaseColor;
 
 struct Material {
 	vec4 baseColorFactor;
@@ -210,11 +211,11 @@ void main()
 	// Gamma correction
 	color = pow(color, vec3(1.0f / uboParams.gamma));
 
-	vec3 emissive = uboMat.mats[inMatIdx].emissiveFactor.rgb;
-	if (uboMat.mats[inMatIdx].emissiveTexture > .0f) {
+	vec3 emissive = uboMat.mats[inMatIdx].emissiveFactor.rgb + inCaseColor.rgb;
+	if (uboMat.mats[inMatIdx].emissiveTexture > 0)
 		emissive *= texture(maps, vec3(inUV, uboMat.mats[inMatIdx].emissiveTexture - 1)).rgb;// * u_EmissiveFactor;
-		color += emissive;
-	}
+
+	color += emissive;
 
 	outColor = vec4(color, baseColor.a);
 }
