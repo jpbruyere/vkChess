@@ -15,6 +15,7 @@ vkPbrRenderer::vkPbrRenderer()
 vkPbrRenderer::~vkPbrRenderer() {
     vkDestroyPipeline(device, pipelines.skybox, nullptr);
     vkDestroyPipeline(device, pipelines.pbr, nullptr);
+    vkDestroyPipeline(device, pipelines.pbrAlphaBlend, nullptr);
 
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
     vkDestroyDescriptorSetLayout(device, dsLayoutScene, nullptr);
@@ -22,15 +23,14 @@ vkPbrRenderer::~vkPbrRenderer() {
 
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
-    for (int i=0; i<swapChain.imageCount; i++)
-        vulkanDevice->destroyFence (fences[i]);
+    vulkanDevice->destroySemaphore (drawComplete);
+    vulkanDevice->destroyFence (fence);
 
     for (int i=0; i<models2.size(); i++)
         models2[i].destroy();
     models.skybox.destroy();
 
     sharedUBOs.matrices.destroy();
-    //sharedUBOs.skybox.destroy();
     sharedUBOs.params.destroy();
 
     textures.environmentCube.destroy();
@@ -60,54 +60,51 @@ void vkPbrRenderer::buildCommandBuffers()
     renderPassBeginInfo.renderArea.offset.y = 0;
     renderPassBeginInfo.renderArea.extent.width = width;
     renderPassBeginInfo.renderArea.extent.height = height;
-    renderPassBeginInfo.clearValueCount = settings.multiSampling ? 3 : 2;
+    renderPassBeginInfo.clearValueCount = 2;
     renderPassBeginInfo.pClearValues = clearValues;
+    renderPassBeginInfo.framebuffer = frameBuffer;
 
-    for (size_t i = 0; i < drawCmdBuffers.size(); ++i) {
-        renderPassBeginInfo.framebuffer = frameBuffers[i];
+    VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffer, &cmdBufferBeginInfo));
+    vkCmdBeginRenderPass(drawCmdBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufferBeginInfo));
-        vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    VkViewport viewport{};
+    viewport.width = (float)width;
+    viewport.height = (float)height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(drawCmdBuffer, 0, 1, &viewport);
 
-        VkViewport viewport{};
-        viewport.width = (float)width;
-        viewport.height = (float)height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
+    VkRect2D scissor{};
+    scissor.extent = { width, height };
+    vkCmdSetScissor(drawCmdBuffer, 0, 1, &scissor);
 
-        VkRect2D scissor{};
-        scissor.extent = { width, height };
-        vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
+    vkCmdBindDescriptorSets(drawCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &dsScene, 0, NULL);
 
-        vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &dsScene, 0, NULL);
+    vkCmdBindPipeline(drawCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
 
-        vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
-
-        models.skybox.buildCommandBuffer(drawCmdBuffers[i], pipelineLayout);
+    models.skybox.buildCommandBuffer(drawCmdBuffer, pipelineLayout);
 
 
-        // Opaque primitives first
-        vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
-        //for (m=0; m<models2.size(); m++)
-        //    models2[m].buildCommandBuffer(drawCmdBuffers[i]);
-        //models2[1].buildCommandBuffer(drawCmdBuffers[i], pipelineLayout);
+    // Opaque primitives first
+    vkCmdBindPipeline(drawCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
+    //for (m=0; m<models2.size(); m++)
+    //    models2[m].buildCommandBuffer(drawCmdBuffers[i]);
+    //models2[1].buildCommandBuffer(drawCmdBuffers[i], pipelineLayout);
 
-        //vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbrAlphaBlend);
-        models2[0].buildCommandBuffer(drawCmdBuffers[i], pipelineLayout);
+    //vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbrAlphaBlend);
+    models2[0].buildCommandBuffer(drawCmdBuffer, pipelineLayout);
 
-        // Transparent last
-        // TODO: Correct depth sorting
-        /*vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbrAlphaBlend);
-        for (auto primitive : model.primitives) {
-            if (model.materials[primitive.material].alphaMode == vkglTF::ALPHAMODE_BLEND) {
-                renderPrimitive(model, primitive, drawCmdBuffers[i]);
-            }
-        }*/
+    // Transparent last
+    // TODO: Correct depth sorting
+    /*vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbrAlphaBlend);
+    for (auto primitive : model.primitives) {
+        if (model.materials[primitive.material].alphaMode == vkglTF::ALPHAMODE_BLEND) {
+            renderPrimitive(model, primitive, drawCmdBuffers[i]);
+        }
+    }*/
 
-        vkCmdEndRenderPass(drawCmdBuffers[i]);
-        VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
-    }
+    vkCmdEndRenderPass(drawCmdBuffer);
+    VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffer));
 }
 
 void vkPbrRenderer::loadAssets()
@@ -1195,9 +1192,8 @@ void vkPbrRenderer::prepare()
 {
     VulkanExampleBase::prepare();
 
-    fences.resize(swapChain.imageCount);
-    for (int i=0; i<swapChain.imageCount; i++)
-        fences[i] = vulkanDevice->createFence(true);
+
+    fence = vulkanDevice->createFence(true);
 
     drawComplete= vulkanDevice->createSemaphore();
 
@@ -1229,14 +1225,14 @@ void vkPbrRenderer::prepare()
 void vkPbrRenderer::submit (VkQueue queue, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount) {
     if (!prepared)
         return;
-    submitInfo.pCommandBuffers		= &drawCmdBuffers[swapChain.currentBuffer];
+    submitInfo.pCommandBuffers		= &drawCmdBuffer;
     submitInfo.waitSemaphoreCount	= waitSemaphoreCount;
     submitInfo.pWaitSemaphores		= waitSemaphore;
 
-    VK_CHECK_RESULT(vkWaitForFences(device, 1, &fences[swapChain.currentBuffer], VK_TRUE, UINT64_MAX));
-    VK_CHECK_RESULT(vkResetFences(device, 1, &fences[swapChain.currentBuffer]));
+    VK_CHECK_RESULT(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX));
+    VK_CHECK_RESULT(vkResetFences(device, 1, &fence));
 
-    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fences[swapChain.currentBuffer]));
+    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fence));
 }
 
 void vkPbrRenderer::viewChanged()

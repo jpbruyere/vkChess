@@ -40,6 +40,7 @@ protected:
 
     virtual void destroy();
     virtual void prepareRenderPass();
+    virtual void prepareFrameBuffer();
     virtual void prepareDescriptors();
     virtual void preparePipeline();
 
@@ -51,9 +52,8 @@ public:
     uint32_t			vertexCount = 0;
     uint32_t			sdffVertexCount = 0;
 
-    vkRenderer (vks::VulkanDevice* _device, VulkanSwapChain* _swapChain, VkFormat depthFormat,
-                    VkSampleCountFlagBits _sampleCount, std::vector<VkFramebuffer> &_frameBuffers,
-                    vks::Buffer *_uboMatrices);
+    vkRenderer (vks::VulkanDevice* _device, VulkanSwapChain* _swapChain, VkFormat _depthFormat,
+                    VkSampleCountFlagBits _sampleCount, vks::Buffer *_uboMatrices);
     virtual ~vkRenderer();
 
     virtual void buildCommandBuffer ();

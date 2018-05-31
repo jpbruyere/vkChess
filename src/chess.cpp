@@ -29,6 +29,7 @@
 #include "vkrenderer.h"
 
 #include <glm/gtx/spline.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 
 //#define GLM_DEPTH_CLIP_SPACE = GLM_DEPTH_NEGATIVE_ONE_TO_ONE
 //GLM_DEPTH_ZERO_TO_ONE
@@ -41,10 +42,11 @@ class VulkanExample : public vkPbrRenderer
 {
 public:
     enum Color { White, Black };
-    enum PceType { Pawn, Rook, Knight, Bishop, Queen, King };
+    enum PceType {Pawn, Rook, Knight, Bishop, Queen, King };
     struct Piece
     {
         PceType     type;
+        bool        promoted;
         Color       color;
 
         glm::ivec2  position;
@@ -54,6 +56,16 @@ public:
         bool        hasMoved;
 
         uint32_t    instance;
+
+        glm::vec3 getCurrentPosition(vkglTF::Model* mod) {
+            glm::vec3 scale;
+            glm::quat rotation;
+            glm::vec3 translation;
+            glm::vec3 skew;
+            glm::vec4 perspective;
+            glm::decompose(mod->instanceDatas[instance].modelMat, scale, rotation, translation, skew, perspective);
+            return translation;
+        }
     };
     struct animation{
         uint32_t uboIdx;
@@ -77,13 +89,15 @@ public:
 
     ~VulkanExample()
     {
+        delete(debugRenderer);
 
     }
 
-    const glm::vec4 hoverColor = glm::vec4(0.0,0.0,0.1,1.0);
-    const glm::vec4 selectedColor = glm::vec4(0.,0.0,0.2,1.0);
-    const glm::vec4 validMoveColor = glm::vec4(0.0,0.,0.4,1.0);
-    const glm::vec4 bestMoveColor = glm::vec4(0.0,0.2,0.0,1.0);
+    const glm::vec4 hoverColor      = glm::vec4(0.0,0.0,0.1,1.0);
+    const glm::vec4 selectedColor   = glm::vec4(0.0,0.0,0.2,1.0);
+    const glm::vec4 validMoveColor  = glm::vec4(0.0,0.0,0.4,1.0);
+    const glm::vec4 bestMoveColor   = glm::vec4(0.0,0.2,0.0,1.0);
+    const glm::vec4 checkColor      = glm::vec4(0.6,0.0,0.0,1.0);
 
     Color currentPlayer = White;
     bool gameStarted = false;
@@ -142,13 +156,7 @@ public:
     }
 
     Piece* getPiece (glm::ivec2 pos){
-        for (int i=0;i<32;i++) {
-            if (pieces[i].captured)
-                continue;
-            if (pieces[i].position == pos)
-                return &pieces[i];
-        }
-        return nullptr;
+        return board[pos.x][pos.y];
     }
 
     void animatePce (uint32_t pceIdx, float x, float y) {
@@ -279,11 +287,26 @@ public:
             }
 
         }else if (strncmp (lineBuf, "bestmove", 8)==0){
-            glm::ivec2 orig = glm::ivec2(lineBuf[9]-97, lineBuf[10]-49);//{};
-            glm::ivec2 dest = glm::ivec2(lineBuf[11]-97, lineBuf[12]-49);//{};
+            glm::ivec2 orig = glm::ivec2(lineBuf[9]-97, lineBuf[10]-49);
+            glm::ivec2 dest = glm::ivec2(lineBuf[11]-97, lineBuf[12]-49);
 
             if (playerIsAi[currentPlayer]){
-                processMove(orig,dest);
+                PceType promotion = Pawn;
+                switch (lineBuf[13]) {
+                case 'q':
+                    promotion = Queen;
+                    break;
+                case 'r':
+                    promotion = Rook;
+                    break;
+                case 'b':
+                    promotion = Bishop;
+                    break;
+                case 'n':
+                    promotion = Knight;
+                    break;
+                }
+                processMove (orig, dest, promotion);
                 switchPlayer();
             }else if (hint){
                 switchPlayer();
@@ -364,17 +387,101 @@ public:
             p->position = glm::ivec2(9 + cptBlackOut / CAPTURE_ZONE_HEIGHT, 7 - cptBlackOut % CAPTURE_ZONE_HEIGHT);
             cptBlackOut ++;
         }
-        if (animate)
+        if (animate){
+            if (p->promoted)
+                resetPromotion(p,true);
             animatePce (p->instance, (float)p->position.x,(float)p->position.y);
+        }
     }
 
-    void processMove (glm::ivec2 orig, glm::ivec2 dest, bool animate = true) {
+    void resetPromotion (Piece* p, bool rebuildCmdBuffs = true) {
+        p->type = Pawn;
+        p->promoted = false;
+        mod->instances[p->instance] = mod->getPrimitiveIndex("pawn");
+        if (rebuildCmdBuffs)
+            rebuildCommandBuffers();
+    }
+
+    void promote(Piece* p, PceType promotion) {
+        uint32_t primIdx;
+        switch (promotion) {
+        case Queen:
+            primIdx = mod->getPrimitiveIndex("queen");
+            break;
+        case Bishop:
+            primIdx = mod->getPrimitiveIndex("bishop");
+            break;
+        case Rook:
+            primIdx = mod->getPrimitiveIndex("rook");
+            break;
+        case Knight:
+            primIdx = mod->getPrimitiveIndex("knight");
+            break;
+        }
+        mod->instances[p->instance] = primIdx;
+        rebuildCommandBuffers();
+        p->promoted = true;
+        p->type = promotion;
+    }
+    void replay (int untilPtr) {
+        resetBoard(false);
+
+        while (movesPtr<untilPtr) {
+            glm::ivec2 orig = glm::ivec2(movesBuffer[movesPtr]-97, movesBuffer[movesPtr+1]-49);
+            glm::ivec2 dest = glm::ivec2(movesBuffer[movesPtr+2]-97, movesBuffer[movesPtr+3]-49);
+            PceType promotion = Pawn;
+            if (movesBuffer[movesPtr+4] != 0x20) {
+                switch (movesBuffer[movesPtr+4]) {
+                case 'q':
+                    promotion = Queen;
+                    break;
+                case 'r':
+                    promotion = Rook;
+                    break;
+                case 'b':
+                    promotion = Bishop;
+                    break;
+                case 'n':
+                    promotion = Knight;
+                    break;
+                }
+            }
+            processMove (orig, dest, promotion, false);
+            switchPlayer(false);
+        }
+    }
+    void undo () {
+
+        if (movesPtr < 25)
+            return;
+        replay (previouMovesPtr);
+        if (playerIsAi[currentPlayer] && movesPtr>24)
+            replay (previouMovesPtr);
+        rebuildCommandBuffers();
+        for (int i=0; i<32; i++){
+            glm::vec3 curPos = pieces[i].getCurrentPosition(mod);
+            //glm::vec3(x*2 - 7,0, 7 - y*2)),
+            if ((int)curPos.x != (pieces[i].position.x*2-7) || (int)curPos.z != (7-2*pieces[i].position.y))
+                animatePce (pieces[i].instance, (float)pieces[i].position.x,(float)pieces[i].position.y);
+        }
+
+        startTurn();
+    }
+
+    void processMove (glm::ivec2 orig, glm::ivec2 dest, PceType promotion = Pawn, bool animate = true) {
         if (orig == dest)
             return;
         Piece* p    = getPiece(orig);
         Piece* pDest= getPiece(dest);
 
+
         if (p) {
+            if (p->type == King && animate) {//reset case color if king was in check state
+                glm::vec4 c = getCaseLight (orig);
+                if (c.x > 0.f)
+                    setCaseLight(p->position, glm::vec4(0,c.y,c.z,c.w));
+            }
+
             if (p->type == King && abs(orig.x - dest.x)>1){//rocking
                 //move tower
                 if (dest.x == 6)//right tower
@@ -388,8 +495,10 @@ public:
                     std::cerr << "Unexpected Piece on case: (" << dest.x << "," << dest.y << ")" << std::endl;
                     exit(-1);
                 }
-            }else if (p->type == Pawn && orig.x != dest.x) //prise en passant
-                capturePce (board[dest.x][orig.y], animate);
+            }else if (p->type == Pawn) {
+                if (orig.x != dest.x) //pawn attack
+                    capturePce (board[dest.x][orig.y], animate);
+            }
             //normal move
             boardMove(board[orig.x][orig.y], dest, animate);
         }
@@ -399,6 +508,25 @@ public:
         movesBuffer[movesPtr++]=orig.y + 49;
         movesBuffer[movesPtr++]=dest.x + 97;
         movesBuffer[movesPtr++]=dest.y + 49;
+
+        if (promotion != Pawn) {
+            switch (promotion) {
+            case Queen:
+                movesBuffer[movesPtr++]='q';
+                break;
+            case Bishop:
+                movesBuffer[movesPtr++]='b';
+                break;
+            case Rook:
+                movesBuffer[movesPtr++]='r';
+                break;
+            case Knight:
+                movesBuffer[movesPtr++]='n';
+                break;
+            }
+            promote(p, promotion);
+        }
+
         movesBuffer[movesPtr++]=0x20;//space
     }
 
@@ -414,17 +542,22 @@ public:
         }
         validMoves = moves;
     }
+    Piece* getKing (Color player) {
+        return (player==White)? &pieces[4] : &pieces[20];
+    }
     bool kingIsSafe(Color player){
-        Piece* k = (player==White)? &pieces[4] : &pieces[20];
+        Piece* k = getKing(player);
 
         int pStartOffset = (k->color == White)?16:0;//we check moves of opponent
         for (int pIdx=pStartOffset; pIdx<pStartOffset+16; pIdx++) {
             validMoves.clear();
             computeValidMove(&pieces[pIdx]);
-            if (std::find(validMoves.begin(), validMoves.end(), k->position)!=validMoves.end())
+            if (std::find(validMoves.begin(), validMoves.end(), k->position)!=validMoves.end()){
+                validMoves.clear();
                 return false;
+            }
         }
-
+        validMoves.clear();
         return true;
     }
 
@@ -435,7 +568,7 @@ public:
         Piece* savedBoard[8][8] = {};
         memcpy (savedBoard, board, 64*sizeof(Piece*));
 
-        processMove (p->position, newPos, false);
+        processMove (p->position, newPos, Pawn, false);
 
         bool kingOk = kingIsSafe(p->color);
 
@@ -471,7 +604,7 @@ public:
                     if (target->color == p->color || p->type != Pawn)
                         return;
                     if (p->color == Black) {
-                        if (newPos.y != 3)
+                        if (newPos.y != 2)
                             return;
                         if ((movesBuffer[previouMovesPtr]-97 != newPos.x) ||
                                 (movesBuffer[previouMovesPtr+2]-97 != newPos.x) ||//not a straight move asside
@@ -479,7 +612,7 @@ public:
                                 (movesBuffer[previouMovesPtr+3]-49 != 3))
                             return;
                     }else{
-                        if (newPos.y != 4)
+                        if (newPos.y != 5)
                             return;
                         if ((movesBuffer[previouMovesPtr]-97 != newPos.x) ||
                                 (movesBuffer[previouMovesPtr+2]-97 != newPos.x) ||//not a straight move asside
@@ -487,19 +620,6 @@ public:
                                 (movesBuffer[previouMovesPtr+3]-49 != 4))
                             return;
                     }
-                //check pawn promotion
-                /*int promoteRow = 7;
-                if (pce&0x80)//black
-                    promoteRow = 0;
-                if (row ==  promoteRow){
-                    string basicPawnMove = getChessCell (pos.col, pos.raw) + getChessCell (col, row);
-                    return new string[] {
-                        basicPawnMove + "q",
-                        basicPawnMove + "k",
-                        basicPawnMove + "r",
-                        basicPawnMove + "b"
-                    };
-                    */
                 }
             }
             validMoves.push_back(newPos);
@@ -508,20 +628,6 @@ public:
             return;
         else if (p->type == Pawn && deltaX == 0)//pawn cant take forward
             return;
-
-    //    if (Board [col, row].Type == PieceType.King)
-    //        return new string[] { getChessCell (pos.X, pos.Y) + getChessCell (col, row) + "K"};
-
-    //    if (board [pos.X, pos.Y].Type == PieceType.Pawn &&
-    //        row ==  Board [pos.X, pos.Y].Player.PawnPromotionY){
-    //        string basicPawnMove = getChessCell (pos.X, pos.Y) + getChessCell (col, row);
-    //        return new string[] {
-    //            basicPawnMove + "q",
-    //            basicPawnMove + "k",
-    //            basicPawnMove + "r",
-    //            basicPawnMove + "b"
-    //        };
-    //    }
 
         validMoves.push_back(newPos);
     }
@@ -631,31 +737,40 @@ public:
             checkSingleMove (p, 1, 1);
         }
     }
-
-    void startGame () {
+    void resetBoard(bool animate = true) {
         currentPlayer = White;
         cptWhiteOut = cptBlackOut = 0;
 
         for (int i=0; i<32; i++) {
             Piece* p = &pieces[i];
+            if (p->promoted)
+                resetPromotion (p, false);
             if (p->position != p->initPosition)
-                boardMove (p, p->initPosition, true);
+                boardMove (p, p->initPosition, animate);
             p->captured = false;
             p->hasMoved = false;
         }
+        movesPtr = previouMovesPtr = 24;
+    }
+
+    void startGame () {
+        resetBoard();
+
+        rebuildCommandBuffers();
 
         strncpy(movesBuffer, "position startpos moves ", 24);
-        movesPtr = previouMovesPtr = 24;
+
 
         //enableHint();
     }
-    void switchPlayer () {
+    void switchPlayer (bool _startTurn = true) {
         if (currentPlayer==White)
             currentPlayer = Black;
         else
             currentPlayer = White;
 
-        startTurn();
+        if (_startTurn)
+            startTurn();
     }
     void clearBestMove () {
         if (bestMoveOrig.x >=0){
@@ -678,32 +793,38 @@ public:
             subCaseLight(validMoves[i], validMoveColor);
         validMoves.clear();
 
+        if (!kingIsSafe(currentPlayer))
+            addCaseLight(getKing(currentPlayer)->position, checkColor);
+
         if (playerIsAi[currentPlayer]){
             sendPositionsCmd();
             write(sfWritefd, sfcmdGo , strlen(sfcmdGo));
             return;
-        }else if (!hint)
+        }
+
+        if (!hint)
             return;
         sendPositionsCmd();
         write(sfWritefd,"go infinite\n", 12);
     }
 
-    void addPiece (const std::string& model, PceType type, Color color, int x, int y, float yAngle = 0.f) {
-        static int pIdx = 0;
-
+    void addPiece (uint32_t pIdx, const std::string& model, PceType type, Color color, int x, int y, float yAngle = 0.f) {
         pieces[pIdx].type = type;
         pieces[pIdx].color = color;
+        pieces[pIdx].promoted = false;
         pieces[pIdx].position = pieces[pIdx].initPosition = glm::ivec2(x,y);
+        int matIdx = -1;//default is white
+        if (color == Black)
+            matIdx = blackMatIdx;
         pieces[pIdx].instance =
                 mod->addInstance(model,
                     glm::rotate(
                         glm::translate(glm::mat4(1.0), glm::vec3(x*2 - 7,0, 7 - y*2)),
-                    yAngle, glm::vec3(0,1,0)));
+                    yAngle, glm::vec3(0,1,0)), matIdx);
         board[x][y] = &pieces[pIdx];
-        pIdx++;
     }
 
-    uint32_t selInstanceIdx;
+    int blackMatIdx = -1;
     vkglTF::Model* mod;
 
     const char* caseX = "abcdefgh";
@@ -725,32 +846,33 @@ public:
 
 
 
-        //selInstanceIdx = mod->addInstance("circle", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+        blackMatIdx = mod->getMaterialIndex("black");
 
 
-        addPiece("white_rook",  Rook, White,    0, 0);
-        addPiece("white_knight",Knight, White,  1, 0);
-        addPiece("white_bishop",Bishop, White,  2, 0);
-        addPiece("white_queen", Queen, White,   3, 0);
-        addPiece("white_king",  King, White,    4, 0);
-        addPiece("white_bishop",Bishop, White,  5, 0);
-        addPiece("white_knight",Knight, White,  6, 0);
-        addPiece("white_rook",  Rook, White,    7, 0);
-
-        for (int i=0; i<8; i++)
-            addPiece("white_pawn", Pawn, White, i, 1);
-
-        addPiece("black_rook",  Rook, Black,    0, 7);
-        addPiece("black_knight",Knight, Black,  1, 7, M_PI);
-        addPiece("black_bishop",Bishop, Black,  2, 7);
-        addPiece("black_queen", Queen, Black,   3, 7);
-        addPiece("black_king",  King, Black,    4, 7);
-        addPiece("black_bishop",Bishop, Black,  5, 7);
-        addPiece("black_knight",Knight, Black,  6, 7, M_PI);
-        addPiece("black_rook",  Rook, Black,    7, 7);
+        addPiece(00, "rook",  Rook, White,    0, 0);
+        addPiece(07, "rook",  Rook, White,    7, 0);
+        addPiece(16, "rook",  Rook, Black,    0, 7);
+        addPiece(23, "rook",  Rook, Black,    7, 7);
+        addPiece(01, "knight",Knight, White,  1, 0);
+        addPiece(06, "knight",Knight, White,  6, 0);
+        addPiece(17, "knight",Knight, Black,  1, 7, M_PI);
+        addPiece(22, "knight",Knight, Black,  6, 7, M_PI);
+        addPiece(02, "bishop",Bishop, White,  2, 0);
+        addPiece(05, "bishop",Bishop, White,  5, 0);
+        addPiece(18, "bishop",Bishop, Black,  2, 7);
+        addPiece(21, "bishop",Bishop, Black,  5, 7);
+        addPiece(03, "queen", Queen, White,   3, 0);
+        addPiece(19, "queen", Queen, Black,   3, 7);
+        addPiece(04, "king",  King, White,    4, 0);
+        addPiece(20, "king",  King, Black,    4, 7);
 
         for (int i=0; i<8; i++)
-            addPiece("black_pawn", Pawn, Black, i, 6);
+            addPiece(8 + i, "pawn", Pawn, White, i, 1);
+        for (int i=0; i<8; i++){
+            addPiece(24 + i, "pawn", Pawn, Black, i, 6);
+        }
+
+
 
         for (int y=0; y<8; y++) {
             for (int x=0; x<8; x++) {
@@ -762,7 +884,7 @@ public:
         vkPbrRenderer::prepare();
 
         debugRenderer = new vkRenderer (vulkanDevice, &swapChain, depthFormat, settings.sampleCount,
-                                                        frameBuffers, &sharedUBOs.matrices);
+                                                        &sharedUBOs.matrices);
 
         //debugRenderer->clear();
         debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
@@ -776,6 +898,13 @@ public:
             std::cout << "stockfish is ready" << std::endl;
 
         startGame();
+    }
+    inline glm::vec4 getCaseLight (glm::ivec2 c) {
+        return mod->instanceDatas[casesInstances[c.x][c.y]].color;
+    }
+    void setCaseLight (glm::ivec2 c, glm::vec4 color) {
+        mod->instanceDatas[casesInstances[c.x][c.y]].color = color;
+        mod->setInstanceIsDirty(casesInstances[c.x][c.y]);
     }
     inline void addCaseLight (glm::ivec2 c, glm::vec4 color) {
         addCaseLight(c.x, c.y, color);
@@ -846,7 +975,15 @@ public:
             Piece* p = board[selectedSquare.x][selectedSquare.y];
             std::vector<glm::ivec2>::iterator pos = std::find(validMoves.begin(), validMoves.end(), hoverSquare);
             if (pos!=validMoves.end()){
-                processMove(p->position, *pos);
+                //check pawn promotion
+                int promoteRow = (p->color == White) ? 7 : 0;
+                if (pos->y ==  promoteRow && p->type == Pawn && !p->promoted){
+                    //promote dialog
+
+                    processMove(p->position, *pos, Queen);
+                }else
+                    processMove(p->position, *pos);
+
                 if (hint)
                     write(sfWritefd,"stop\n",5);
                 else
@@ -916,6 +1053,14 @@ public:
     }
     virtual void keyPressed(uint32_t key) {
         switch (key) {
+        case 42://g: restart game
+            break;
+        case 27://r: redo last undo
+            startGame();
+            break;
+        case 30://u: undo last human move
+            undo();
+            break;
         case 43://h
             toogleHint();
             break;

@@ -113,7 +113,7 @@ namespace vks
 
             device->flushCommandBuffer(blitCmd, copyQueue, true);
 
-            createView(VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, infos.mipLevels, infos.arrayLayers);
+            createView(VK_IMAGE_VIEW_TYPE_2D_ARRAY, VK_IMAGE_ASPECT_COLOR_BIT, infos.mipLevels, infos.arrayLayers);
             createSampler(VK_FILTER_LINEAR,VK_SAMPLER_ADDRESS_MODE_REPEAT,VK_SAMPLER_MIPMAP_MODE_LINEAR,
                           (float)infos.mipLevels,VK_TRUE,8.0f,VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE);
 
@@ -131,12 +131,12 @@ namespace vks
         void destroy()
         {
             if (view)
-                vkDestroyImageView(device->logicalDevice, view, VK_NULL_HANDLE);
+                vkDestroyImageView  (device->logicalDevice, view, VK_NULL_HANDLE);
             if (sampler)
-                vkDestroySampler(device->logicalDevice, sampler, VK_NULL_HANDLE);
+                vkDestroySampler    (device->logicalDevice, sampler, VK_NULL_HANDLE);
             if (image){
-                vkDestroyImage(device->logicalDevice, image, VK_NULL_HANDLE);
-                vkFreeMemory(device->logicalDevice, deviceMemory, VK_NULL_HANDLE);
+                vkDestroyImage      (device->logicalDevice, image, VK_NULL_HANDLE);
+                vkFreeMemory        (device->logicalDevice, deviceMemory, VK_NULL_HANDLE);
             }
         }
         void setImageLayout(

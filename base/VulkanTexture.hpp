@@ -143,7 +143,7 @@ namespace vks
 
             this->device = _device;
             create(VK_IMAGE_TYPE_2D, format,
-                   static_cast<uint32_t>(texCube[0].extent().x),static_cast<uint32_t>(texCube[0].extent().y),
+                   static_cast<uint32_t>(texCube.extent().x),static_cast<uint32_t>(texCube[0].extent().y),
                    imageUsageFlags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                     VK_IMAGE_TILING_OPTIMAL,static_cast<uint32_t>(texCube.levels()), 6, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
 
@@ -163,7 +163,7 @@ namespace vks
                 for (uint32_t level = 0; level < infos.mipLevels; level++) {
                     VkBufferImageCopy bufferCopyRegion = {};
                     bufferCopyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, level, face, 1};
-                    bufferCopyRegion.imageExtent = infos.extent;
+                    bufferCopyRegion.imageExtent = {texCube[face][level].extent().x,texCube[face][level].extent().y,1};
                     bufferCopyRegion.bufferOffset = offset;
 
                     bufferCopyRegions.push_back(bufferCopyRegion);
@@ -185,11 +185,12 @@ namespace vks
                                    static_cast<uint32_t>(bufferCopyRegions.size()), bufferCopyRegions.data());
 
             setImageLayout(copyCmd,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                            subresourceRange,
-                           VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+                           VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
             device->flushCommandBuffer(copyCmd, copyQueue, true);
+            stagingBuffer.destroy();
 
             createView(VK_IMAGE_VIEW_TYPE_CUBE, VK_IMAGE_ASPECT_COLOR_BIT,infos.mipLevels,6);
             createSampler(VK_FILTER_LINEAR,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,VK_SAMPLER_MIPMAP_MODE_LINEAR);

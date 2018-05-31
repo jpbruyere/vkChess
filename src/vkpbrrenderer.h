@@ -14,7 +14,7 @@ class vkPbrRenderer : public VulkanExampleBase
 public:
     std::vector<vkglTF::Model> models2;
 
-    std::vector<VkFence>    fences;
+    VkFence                 fence;
     VkSemaphore             drawComplete;
     VkSubmitInfo            submitInfo;
 

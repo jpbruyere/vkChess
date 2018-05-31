@@ -239,7 +239,7 @@ namespace vks
 
             // Create the buffer handle
             VkBufferCreateInfo bufferCreateInfo =
-            {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, usageFlags, size, VK_SHARING_MODE_EXCLUSIVE};
+            {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, size, usageFlags, VK_SHARING_MODE_EXCLUSIVE};
             VK_CHECK_RESULT(vkCreateBuffer(logicalDevice, &bufferCreateInfo, nullptr, &buffer->buffer));
 
             // Create the memory backing up the buffer handle

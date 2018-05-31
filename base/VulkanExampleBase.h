@@ -80,18 +80,7 @@ private:
     PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallback;
     PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallback;
     VkDebugReportCallbackEXT debugReportCallback;
-    struct MultisampleTarget {
-        struct {
-            VkImage image;
-            VkImageView view;
-            VkDeviceMemory memory;
-        } color;
-        struct {
-            VkImage image;
-            VkImageView view;
-            VkDeviceMemory memory;
-        } depth;
-    } multisampleTarget;
+    MultisampleTarget multisampleTarget;
 protected:
     VkInstance instance;
     VkPhysicalDevice physicalDevice;
@@ -103,9 +92,9 @@ protected:
     VkQueue queue;
     VkFormat depthFormat;
     VkCommandPool cmdPool;
-    std::vector<VkCommandBuffer> drawCmdBuffers;
+    VkCommandBuffer drawCmdBuffer;
     VkRenderPass renderPass;
-    std::vector<VkFramebuffer>frameBuffers;
+    VkFramebuffer frameBuffer;
     VkPipelineCache pipelineCache;
     VulkanSwapChain swapChain;
     VkSemaphore presentCompleteSemaphore;
@@ -130,11 +119,7 @@ public:
         VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_4_BIT;
     } settings;
 
-    struct DepthStencil {
-        VkImage image;
-        VkDeviceMemory mem;
-        VkImageView view;
-    } depthStencil;
+    DepthStencil depthStencil;
 
     struct GamePadState {
         glm::vec2 axisLeft = glm::vec2(0.0f);
@@ -256,6 +241,7 @@ public:
     virtual void handleMouseButtonDown(int buttonIndex);
     virtual void handleMouseButtonUp(int buttonIndex);
     virtual void buildCommandBuffers();
+    virtual void rebuildCommandBuffers();
     virtual void setupFrameBuffer();
     virtual void prepare();
 

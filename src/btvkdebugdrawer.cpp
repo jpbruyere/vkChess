@@ -8,7 +8,7 @@ btVKDebugDrawer::btVKDebugDrawer(vks::VulkanDevice* _device, VulkanSwapChain *_s
                                  VkFormat depthFormat, VkSampleCountFlagBits _sampleCount,
                                  std::vector<VkFramebuffer>&_frameBuffers, vks::Buffer* _uboMatrices,
                                  std::string fontFnt, vks::Texture& fontTexture)
-:vkRenderer(_device, _swapChain, depthFormat, _sampleCount, _frameBuffers, _uboMatrices)
+:vkRenderer(_device, _swapChain, depthFormat, _sampleCount, _uboMatrices)
 {
     m_debugMode = 0;
 
@@ -204,7 +204,7 @@ void btVKDebugDrawer::buildCommandBuffer (){
     renderPassBeginInfo.renderPass = renderPass;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
-    renderPassBeginInfo.renderArea.extent = swapChain->swapchainExtent;
+    renderPassBeginInfo.renderArea.extent = swapChain->extent;
     renderPassBeginInfo.clearValueCount = (sampleCount > VK_SAMPLE_COUNT_1_BIT) ? 3 : 2;
     renderPassBeginInfo.pClearValues = clearValues;
 
@@ -216,14 +216,14 @@ void btVKDebugDrawer::buildCommandBuffer (){
         vkCmdBeginRenderPass(cmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         VkViewport viewport{};
-        viewport.width = (float)swapChain->swapchainExtent.width;
-        viewport.height = (float)swapChain->swapchainExtent.height;
+        viewport.width = (float)swapChain->extent.width;
+        viewport.height = (float)swapChain->extent.height;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(cmdBuffers[i], 0, 1, &viewport);
 
         VkRect2D scissor{};
-        scissor.extent = { swapChain->swapchainExtent.width, swapChain->swapchainExtent.height};
+        scissor.extent = { swapChain->extent.width, swapChain->extent.height};
         vkCmdSetScissor(cmdBuffers[i], 0, 1, &scissor);
 
         VkDeviceSize offsets[1] = { 0 };

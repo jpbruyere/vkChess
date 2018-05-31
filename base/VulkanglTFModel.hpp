@@ -85,9 +85,9 @@ namespace vkglTF
     };
 
     struct InstanceData {
-        uint32_t materialIndex = 0;
-        glm::mat4 modelMat = glm::mat4();
-        glm::vec4 color = glm::vec4(0);
+        uint32_t    materialIndex = 0;
+        glm::mat4   modelMat = glm::mat4();
+        glm::vec4   color = glm::vec4(0);
     };
 
     /*
@@ -514,25 +514,32 @@ namespace vkglTF
                 addInstance(i,glm::mat4(1));
             }
         }
-        uint32_t addInstance(uint32_t partIdx,const glm::mat4& modelMat){
+        uint32_t addInstance(uint32_t partIdx,const glm::mat4& modelMat, int materialIdx = -1){
             uint32_t idx = instances.size();
             instances.push_back (partIdx);
             InstanceData id;
-            id.materialIndex = primitives[partIdx].material;
+            if (materialIdx < 0)//gltf material
+                id.materialIndex = primitives[partIdx].material;
+            else//force another material
+                id.materialIndex = materialIdx;
             id.modelMat = modelMat;
             instanceDatas.push_back(id);
             return idx;
         }
-        uint32_t addInstance(const std::string& name, const glm::mat4& modelMat) {
+        uint32_t addInstance(const std::string& name, const glm::mat4& modelMat, int materialIdx = -1){
             for (int i=0; i<primitives.size(); i++) {
                 if (name != primitives[i].name)
                     continue;
-                return addInstance(i,modelMat);
+                return addInstance(i,modelMat, materialIdx);
             }
             return 0;
         }
         Primitive* getPrimitiveFromInstanceIdx (uint32_t idx) {
             return &primitives[instances[idx]];
+        }
+        int getPrimitiveIndex (const std::string& _name) {
+            auto it = find_if(primitives.begin(), primitives.end(), [&_name](const Primitive& obj) {return obj.name == _name;});
+            return (it != primitives.end()) ? std::distance(primitives.begin(), it) : -1 ;
         }
         int getMaterialIndex (const std::string& _name) {
             std::map<std::string, int>::iterator it = materialsNames.find(_name);

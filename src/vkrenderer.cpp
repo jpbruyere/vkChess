@@ -2,15 +2,14 @@
 
 const VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-vkRenderer::vkRenderer(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
-                       VkFormat depthFormat, VkSampleCountFlagBits _sampleCount,
-                       std::vector<VkFramebuffer>&_frameBuffers, vks::Buffer* _uboMatrices)
+vkRenderer::vkRenderer (vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
+                       VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
+                       vks::Buffer* _uboMatrices)
 {
     swapChain   = _swapChain;
     device      = _device;
-    depthFormat = depthFormat;
+    depthFormat = _depthFormat;
     sampleCount = _sampleCount;
-    frameBuffers= _frameBuffers;
     uboMatrices = _uboMatrices;
 
     prepare();
@@ -28,14 +27,22 @@ void vkRenderer::destroy() {
     vertexBuff.unmap();
     vertexBuff.destroy();
 
+    for (uint32_t i = 0; i < frameBuffers.size(); i++)
+        vkDestroyFramebuffer(device->logicalDevice, frameBuffers[i], nullptr);
+
+    vkFreeCommandBuffers(device->logicalDevice, commandPool, cmdBuffers.size(), cmdBuffers.data());
+
+    for (uint32_t i = 0; i < fences.size(); i++)
+        device->destroyFence(fences[i]);
+
+    device->destroySemaphore(drawComplete);
+
     vkDestroyRenderPass     (device->logicalDevice, renderPass, VK_NULL_HANDLE);
     vkDestroyPipeline       (device->logicalDevice, pipeline, VK_NULL_HANDLE);
     vkDestroyPipelineLayout (device->logicalDevice, pipelineLayout, VK_NULL_HANDLE);
-
-    for (int i=0; i<swapChain->imageCount; i++)
-        device->destroyFence (fences[i]);
-
-    device->destroySemaphore    (drawComplete);
+    vkDestroyDescriptorSetLayout(device->logicalDevice, descriptorSetLayout, VK_NULL_HANDLE);
+    vkDestroyDescriptorPool (device->logicalDevice, descriptorPool, VK_NULL_HANDLE);
+    vkDestroyCommandPool    (device->logicalDevice, commandPool, VK_NULL_HANDLE);
 }
 void vkRenderer::prepare() {
     prepareRenderPass();
@@ -52,9 +59,7 @@ void vkRenderer::prepare() {
     submitInfo.commandBufferCount = 1;
     submitInfo.pSignalSemaphores = &drawComplete;
 
-    // Command buffer
-    VkCommandPoolCreateInfo cmdPoolInfo = {};
-    cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    VkCommandPoolCreateInfo cmdPoolInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     cmdPoolInfo.queueFamilyIndex = device->queueFamilyIndices.graphics;
     cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     VK_CHECK_RESULT(vkCreateCommandPool(device->logicalDevice, &cmdPoolInfo, nullptr, &commandPool));
@@ -90,10 +95,10 @@ void vkRenderer::prepareRenderPass()
         attachments[0].format = swapChain->colorFormat;
         attachments[0].samples = sampleCount;
         attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         // This is the frame buffer attachment to where the multisampled image
@@ -111,10 +116,10 @@ void vkRenderer::prepareRenderPass()
         attachments[2].format = depthFormat;
         attachments[2].samples = sampleCount;
         attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[2].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         attachments[2].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
         // Depth resolve attachment
@@ -124,7 +129,7 @@ void vkRenderer::prepareRenderPass()
         attachments[3].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         attachments[3].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attachments[3].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[3].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[3].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         attachments[3].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
         VkAttachmentReference colorReference = {};
@@ -152,9 +157,9 @@ void vkRenderer::prepareRenderPass()
 
         dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
         dependencies[0].dstSubpass = 0;
-        dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        dependencies[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
         dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
@@ -244,6 +249,42 @@ void vkRenderer::prepareRenderPass()
         renderPassCI.dependencyCount = static_cast<uint32_t>(dependencies.size());
         renderPassCI.pDependencies = dependencies.data();
         VK_CHECK_RESULT(vkCreateRenderPass(device->logicalDevice, &renderPassCI, nullptr, &renderPass));
+    }
+    prepareFrameBuffer();
+}
+void vkRenderer::prepareFrameBuffer () {
+    VkImageView attachments[4];
+
+//    if (settings.multiSampling) {
+        attachments[0] = swapChain->multisampleTarget->color.view;
+        attachments[2] = swapChain->multisampleTarget->depth.view;
+        attachments[3] = swapChain->depthStencil->view;
+//    }
+//    else {
+//        attachments[1] = depthStencil.view;
+//    }
+
+    VkFramebufferCreateInfo frameBufferCI{};
+    frameBufferCI.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    frameBufferCI.pNext = NULL;
+    frameBufferCI.renderPass = renderPass;
+    //frameBufferCI.attachmentCount = settings.multiSampling ? 4 :2;
+    frameBufferCI.attachmentCount = 4;
+    frameBufferCI.pAttachments = attachments;
+    frameBufferCI.width = swapChain->extent.width;
+    frameBufferCI.height = swapChain->extent.height;
+    frameBufferCI.layers = 1;
+
+    // Create frame buffers for every swap chain image
+    frameBuffers.resize(swapChain->imageCount);
+    for (uint32_t i = 0; i < frameBuffers.size(); i++) {
+//        if (settings.multiSampling) {
+            attachments[1] = swapChain->buffers[i].view;
+//        }
+//        else {
+//            attachments[0] = swapChain.buffers[i].view;
+//        }
+        VK_CHECK_RESULT(vkCreateFramebuffer(device->logicalDevice, &frameBufferCI, nullptr, &frameBuffers[i]));
     }
 }
 void vkRenderer::prepareDescriptors()
@@ -397,7 +438,7 @@ void vkRenderer::buildCommandBuffer (){
     renderPassBeginInfo.renderPass = renderPass;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
-    renderPassBeginInfo.renderArea.extent = swapChain->swapchainExtent;
+    renderPassBeginInfo.renderArea.extent = swapChain->extent;
     renderPassBeginInfo.clearValueCount = (sampleCount > VK_SAMPLE_COUNT_1_BIT) ? 3 : 2;
     renderPassBeginInfo.pClearValues = clearValues;
 
@@ -409,14 +450,14 @@ void vkRenderer::buildCommandBuffer (){
         vkCmdBeginRenderPass(cmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         VkViewport viewport{};
-        viewport.width = (float)swapChain->swapchainExtent.width;
-        viewport.height = (float)swapChain->swapchainExtent.height;
+        viewport.width = (float)swapChain->extent.width;
+        viewport.height = (float)swapChain->extent.height;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(cmdBuffers[i], 0, 1, &viewport);
 
         VkRect2D scissor{};
-        scissor.extent = { swapChain->swapchainExtent.width, swapChain->swapchainExtent.height};
+        scissor.extent = { swapChain->extent.width, swapChain->extent.height};
         vkCmdSetScissor(cmdBuffers[i], 0, 1, &scissor);
 
         VkDeviceSize offsets[1] = { 0 };

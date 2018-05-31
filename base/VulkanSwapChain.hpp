@@ -28,6 +28,25 @@ typedef struct _SwapChainBuffers {
     VkImageView view;
 } SwapChainBuffer;
 
+struct MultisampleTarget {
+    struct {
+        VkImage image;
+        VkImageView view;
+        VkDeviceMemory memory;
+    } color;
+    struct {
+        VkImage image;
+        VkImageView view;
+        VkDeviceMemory memory;
+    } depth;
+};
+
+struct DepthStencil {
+    VkImage image;
+    VkDeviceMemory mem;
+    VkImageView view;
+};
+
 class VulkanSwapChain
 {
 private:
@@ -48,7 +67,7 @@ public:
     VkDevice device;
     VkFormat colorFormat;
     VkColorSpaceKHR colorSpace;
-    VkExtent2D swapchainExtent = {};
+    VkExtent2D extent = {};
     /** @brief Handle to the current swap chain, required for recreation */
     VkSwapchainKHR swapChain = VK_NULL_HANDLE;
     uint32_t imageCount;
@@ -57,6 +76,9 @@ public:
     uint32_t currentBuffer = 0;
     /** @brief Queue family index of the detected graphics and presenting device queue */
     uint32_t queueNodeIndex = UINT32_MAX;
+
+    MultisampleTarget* multisampleTarget;
+    DepthStencil* depthStencil;
 
     /** @brief Creates the platform specific surface abstraction of the native platform window used for presentation */
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
@@ -282,13 +304,13 @@ public:
         {
             // If the surface size is undefined, the size is set to
             // the size of the images requested.
-            swapchainExtent.width = *width;
-            swapchainExtent.height = *height;
+            extent.width = *width;
+            extent.height = *height;
         }
         else
         {
             // If the surface size is defined, the swap chain size must match
-            swapchainExtent = surfCaps.currentExtent;
+            extent = surfCaps.currentExtent;
             *width = surfCaps.currentExtent.width;
             *height = surfCaps.currentExtent.height;
         }
@@ -360,7 +382,7 @@ public:
         swapchainCI.minImageCount = desiredNumberOfSwapchainImages;
         swapchainCI.imageFormat = colorFormat;
         swapchainCI.imageColorSpace = colorSpace;
-        swapchainCI.imageExtent = { swapchainExtent.width, swapchainExtent.height };
+        swapchainCI.imageExtent = { extent.width, extent.height };
         swapchainCI.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         swapchainCI.preTransform = (VkSurfaceTransformFlagBitsKHR)preTransform;
         swapchainCI.imageArrayLayers = 1;

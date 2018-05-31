@@ -259,18 +259,17 @@ std::string VulkanExampleBase::getWindowTitle()
 
 void VulkanExampleBase::createCommandBuffers()
 {
-    drawCmdBuffers.resize(swapChain.imageCount);
     VkCommandBufferAllocateInfo cmdBufAllocateInfo{};
     cmdBufAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     cmdBufAllocateInfo.commandPool = cmdPool;
     cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cmdBufAllocateInfo.commandBufferCount = static_cast<uint32_t>(drawCmdBuffers.size());
-    VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, drawCmdBuffers.data()));
+    cmdBufAllocateInfo.commandBufferCount = 1;
+    VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &drawCmdBuffer));
 }
 
 void VulkanExampleBase::destroyCommandBuffers()
 {
-    vkFreeCommandBuffers(device, cmdPool, static_cast<uint32_t>(drawCmdBuffers.size()), drawCmdBuffers.data());
+    vkFreeCommandBuffers(device, cmdPool, 1, &drawCmdBuffer);
 }
 
 void VulkanExampleBase::prepare()
@@ -306,7 +305,7 @@ void VulkanExampleBase::prepare()
     */
 
     if (settings.multiSampling) {
-        std::array<VkAttachmentDescription, 4> attachments = {};
+        std::array<VkAttachmentDescription, 2> attachments = {};
 
         // Multisampled attachment that we render to
         attachments[0].format = swapChain.colorFormat;
@@ -318,56 +317,29 @@ void VulkanExampleBase::prepare()
         attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-        // This is the frame buffer attachment to where the multisampled image
-        // will be resolved to and which will be presented to the swapchain
-        attachments[1].format = swapChain.colorFormat;
-        attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        // Multisampled depth attachment we render to
+        attachments[1].format = depthFormat;
+        attachments[1].samples = settings.sampleCount;
+        attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[1].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-        // Multisampled depth attachment we render to
-        attachments[2].format = depthFormat;
-        attachments[2].samples = settings.sampleCount;
-        attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[2].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        // Depth resolve attachment
-        attachments[3].format = depthFormat;
-        attachments[3].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[3].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[3].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[3].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[3].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[3].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[3].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
         VkAttachmentReference colorReference = {};
         colorReference.attachment = 0;
         colorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkAttachmentReference depthReference = {};
-        depthReference.attachment = 2;
+        depthReference.attachment = 1;
         depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-        // Resolve attachment reference for the color attachment
-        VkAttachmentReference resolveReference = {};
-        resolveReference.attachment = 1;
-        resolveReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkSubpassDescription subpass = {};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorReference;
-        // Pass our resolve attachments to the sub pass
-        subpass.pResolveAttachments = &resolveReference;
         subpass.pDepthStencilAttachment = &depthReference;
 
         std::array<VkSubpassDependency, 2> dependencies;
@@ -479,6 +451,9 @@ void VulkanExampleBase::prepare()
         Frame buffer
     */
     setupFrameBuffer();
+
+    swapChain.multisampleTarget = &multisampleTarget;
+    swapChain.depthStencil = &depthStencil;
 }
 
 void VulkanExampleBase::renderFrame()
@@ -792,9 +767,7 @@ VulkanExampleBase::~VulkanExampleBase()
     swapChain.cleanup();
     destroyCommandBuffers();
     vkDestroyRenderPass(device, renderPass, nullptr);
-    for (uint32_t i = 0; i < frameBuffers.size(); i++) {
-        vkDestroyFramebuffer(device, frameBuffers[i], nullptr);
-    }
+    vkDestroyFramebuffer(device, frameBuffer, nullptr);
     vkDestroyImageView(device, depthStencil.view, nullptr);
     vkDestroyImage(device, depthStencil.image, nullptr);
     vkFreeMemory(device, depthStencil.mem, nullptr);
@@ -1990,40 +1963,35 @@ void VulkanExampleBase::setupFrameBuffer()
 
     //
 
-    VkImageView attachments[4];
+    VkImageView attachments[2];
 
-    if (settings.multiSampling) {
-        attachments[0] = multisampleTarget.color.view;
-        attachments[2] = multisampleTarget.depth.view;
-        attachments[3] = depthStencil.view;
-    }
-    else {
-        attachments[1] = depthStencil.view;
-    }
+    attachments[0] = multisampleTarget.color.view;
+    attachments[1] = multisampleTarget.depth.view;
 
     VkFramebufferCreateInfo frameBufferCI{};
     frameBufferCI.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     frameBufferCI.pNext = NULL;
     frameBufferCI.renderPass = renderPass;
-    frameBufferCI.attachmentCount = settings.multiSampling ? 4 :2;
+    frameBufferCI.attachmentCount = 2;
     frameBufferCI.pAttachments = attachments;
     frameBufferCI.width = width;
     frameBufferCI.height = height;
     frameBufferCI.layers = 1;
 
-    // Create frame buffers for every swap chain image
-    frameBuffers.resize(swapChain.imageCount);
-    for (uint32_t i = 0; i < frameBuffers.size(); i++) {
-        if (settings.multiSampling) {
-            attachments[1] = swapChain.buffers[i].view;
-        }
-        else {
-            attachments[0] = swapChain.buffers[i].view;
-        }
-        VK_CHECK_RESULT(vkCreateFramebuffer(device, &frameBufferCI, nullptr, &frameBuffers[i]));
-    }
+    VK_CHECK_RESULT(vkCreateFramebuffer(device, &frameBufferCI, nullptr, &frameBuffer));
 }
 
+void VulkanExampleBase::rebuildCommandBuffers() {
+    prepared = false;
+
+    vkDeviceWaitIdle(device);
+
+    destroyCommandBuffers();
+    createCommandBuffers();
+    buildCommandBuffers();
+
+    prepared = true;
+}
 void VulkanExampleBase::windowResize()
 {
     if (!prepared) {
@@ -2038,9 +2006,8 @@ void VulkanExampleBase::windowResize()
     vkDestroyImageView(device, depthStencil.view, nullptr);
     vkDestroyImage(device, depthStencil.image, nullptr);
     vkFreeMemory(device, depthStencil.mem, nullptr);
-    for (uint32_t i = 0; i < frameBuffers.size(); i++) {
-        vkDestroyFramebuffer(device, frameBuffers[i], nullptr);
-    }
+    vkDestroyFramebuffer(device, frameBuffer, nullptr);
+
     setupFrameBuffer();
     destroyCommandBuffers();
     createCommandBuffers();
