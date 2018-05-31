@@ -717,6 +717,7 @@ public:
 
         //mod->loadFromFile("/home/jp/gltf/chess/blend.gltf", vulkanDevice, queue, true);
         mod->loadFromFile("../data/models/chess.gltf", vulkanDevice, queue, true);
+
         mod->addInstance("frame", glm::translate(glm::mat4(1.0),       glm::vec3( 0,0,0)));
 
         //for (int i=0; i<mod->primitives.size(); i++)
@@ -762,6 +763,13 @@ public:
 
         debugRenderer = new vkRenderer (vulkanDevice, &swapChain, depthFormat, settings.sampleCount,
                                                         frameBuffers, &sharedUBOs.matrices);
+
+        //debugRenderer->clear();
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,1,0), glm::vec3(0,1,0));
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,0,1), glm::vec3(0,0,1));
+        debugRenderer->flush();
+
         startStockFish();
 
         if (getStockFishIsReady())
@@ -830,12 +838,6 @@ public:
     virtual void handleMouseButtonDown(int butIndex) {
         if (butIndex != 1)
             return;
-
-        debugRenderer->clear();
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,1,0), glm::vec3(0,1,0));
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,0,1), glm::vec3(0,0,1));
-        debugRenderer->flush();
 
         if (hoverSquare == selectedSquare || hoverSquare.x <0)
             return;
@@ -927,11 +929,10 @@ public:
         prepareFrame();
 
         this->submit(queue, &presentCompleteSemaphore, 1);
-        //debugRenderer->submit(queue,&this->presentCompleteSemaphore, 1);
-        //debugRenderer->submit(queue,&this->drawComplete, 1);
+        //VK_CHECK_RESULT(swapChain.queuePresent(queue, this->drawComplete));
 
-        //VK_CHECK_RESULT(swapChain.queuePresent(queue, debugRenderer->drawComplete));
-        VK_CHECK_RESULT(swapChain.queuePresent(queue, this->drawComplete));
+        debugRenderer->submit(queue,&this->drawComplete, 1);
+        VK_CHECK_RESULT(swapChain.queuePresent(queue, debugRenderer->drawComplete));
 
         update();
     }
