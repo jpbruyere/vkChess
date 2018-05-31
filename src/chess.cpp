@@ -32,10 +32,8 @@
 #include <glm/gtx/matrix_decompose.hpp>
 
 #define CAPTURE_ZONE_HEIGHT 5
-/*
-    PBR example main class
-*/
-class VulkanExample : public vkPbrRenderer
+
+class VkEngine : public vkPbrRenderer
 {
 public:
     enum Color { White, Black };
@@ -71,7 +69,7 @@ public:
 
     vkRenderer* debugRenderer = nullptr;
 
-    VulkanExample() : vkPbrRenderer()
+    VkEngine() : vkPbrRenderer()
     {
         title = "Vulkan Chess glTf 2.0 PBR";
         camera.type = Camera::CameraType::firstperson;
@@ -84,7 +82,7 @@ public:
         settings.validation = true;
     }
 
-    ~VulkanExample()
+    ~VkEngine()
     {
         delete(debugRenderer);
 
@@ -1082,7 +1080,7 @@ public:
     }
 };
 
-VulkanExample *vulkanExample;
+VkEngine *vulkanExample;
 
 // OS specific macros for the example main entry points
 #if defined(_WIN32)
@@ -1157,8 +1155,8 @@ static void handleEvent(const xcb_generic_event_t *event)
 }
 int main(const int argc, const char *argv[])
 {
-    for (size_t i = 0; i < argc; i++) { VulkanExample::args.push_back(argv[i]); };
-    vulkanExample = new VulkanExample();
+    for (size_t i = 0; i < argc; i++) { VkEngine::args.push_back(argv[i]); };
+    vulkanExample = new VkEngine();
     vulkanExample->initVulkan();
     vulkanExample->setupWindow();
     vulkanExample->prepare();

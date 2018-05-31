@@ -1,6 +1,6 @@
 #pragma once
 
-#include "VulkanExampleBase.h"
+#include "VkEngine.h"
 
 namespace vks
 {

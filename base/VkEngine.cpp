@@ -6,7 +6,7 @@
 * This code is licensed under the MIT license (MIT) (http://opensource.org/licenses/MIT)
 */
 
-#include "VulkanExampleBase.h"
+#include "VkEngine.h"
 #include <fstream>
 
 #if !(defined(VK_USE_PLATFORM_IOS_MVK) || defined(VK_USE_PLATFORM_MACOS_MVK))
