@@ -349,23 +349,24 @@ namespace vkglTF
         {
             for (tinygltf::Material &mat : gltfModel.materials) {
                 vkglTF::Material material = {};
-                if (mat.values.find("baseColorFactor") != mat.values.end()) {
+                if (mat.values.find("baseColorFactor") != mat.values.end())
                     material.baseColorFactor = glm::make_vec4(mat.values["baseColorFactor"].ColorFactor().data());
-                }
-                if (mat.values.find("baseColorTexture") != mat.values.end()) {
+
+                if (mat.values.find("baseColorTexture") != mat.values.end())
                     material.baseColorTexture = gltfModel.textures[mat.values["baseColorTexture"].TextureIndex()].source + 1;
-                }
-                if (mat.values.find("metallicRoughnessTexture") != mat.values.end()) {
+
+                if (mat.values.find("metallicRoughnessTexture") != mat.values.end())
                     material.metallicRoughnessTexture = gltfModel.textures[mat.values["metallicRoughnessTexture"].TextureIndex()].source + 1;
-                }
+
                 if (mat.values.find("roughnessFactor") != mat.values.end())
                     material.roughnessFactor = static_cast<float>(mat.values["roughnessFactor"].Factor());
 
                 if (mat.values.find("metallicFactor") != mat.values.end())
                     material.metallicFactor = static_cast<float>(mat.values["metallicFactor"].Factor());
-                if (mat.additionalValues.find("normalTexture") != mat.additionalValues.end()) {
+
+                if (mat.additionalValues.find("normalTexture") != mat.additionalValues.end())
                     material.normalTexture = gltfModel.textures[mat.additionalValues["normalTexture"].TextureIndex()].source + 1;
-                }
+
                 if (mat.additionalValues.find("emissiveTexture") != mat.additionalValues.end()) {
                     material.emissiveTexture = gltfModel.textures[mat.additionalValues["emissiveTexture"].TextureIndex()].source + 1;
                     material.emissiveFactor = glm::vec4(1.0f);
@@ -377,9 +378,9 @@ namespace vkglTF
                         material.emissiveFactor = glm::make_vec3(pm.ColorFactor().data());
                 }*/
 
-                if (mat.additionalValues.find("occlusionTexture") != mat.additionalValues.end()) {
+                if (mat.additionalValues.find("occlusionTexture") != mat.additionalValues.end())
                     material.occlusionTexture = gltfModel.textures[mat.additionalValues["occlusionTexture"].TextureIndex()].source + 1;
-                }
+
                 if (mat.additionalValues.find("alphaMode") != mat.additionalValues.end()) {
                     tinygltf::Parameter param = mat.additionalValues["alphaMode"];
                     if (param.string_value == "BLEND") {
@@ -621,7 +622,7 @@ namespace vkglTF
 
             VK_CHECK_RESULT(instancesBuff.map());
             minDirty = 0;
-            maxDirty = instanceDatas.size();
+            maxDirty = instanceDatas.size()-1;
             updateInstancesBuffer();
         }
 

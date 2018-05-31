@@ -80,9 +80,9 @@ public:
 
     }
 
-    const glm::vec4 hoverColor = glm::vec4(0.0,0.0,0.05,1.0);
-    const glm::vec4 selectedColor = glm::vec4(0.,0.0,0.1,1.0);
-    const glm::vec4 validMoveColor = glm::vec4(0.0,0.,0.2,1.0);
+    const glm::vec4 hoverColor = glm::vec4(0.0,0.0,0.1,1.0);
+    const glm::vec4 selectedColor = glm::vec4(0.,0.0,0.2,1.0);
+    const glm::vec4 validMoveColor = glm::vec4(0.0,0.,0.4,1.0);
     const glm::vec4 bestMoveColor = glm::vec4(0.0,0.2,0.0,1.0);
 
     Color currentPlayer = White;
@@ -94,7 +94,7 @@ public:
     int cptWhiteOut = 0;
     int cptBlackOut = 0;
 
-    const int animSteps = 200;
+    const int animSteps = 150;
     std::vector <animation> animations;
 
     glm::ivec2 bestMoveOrig = glm::ivec2(-1,-1);
@@ -165,24 +165,19 @@ public:
         }
         animations.push_back(a);
     }
-    void disableHint(){
-        if (!hint)
-            return;
-        if (!playerIsAi[currentPlayer]){
-            bestMoveOrig = bestMoveTarget = glm::ivec2(-1,-1);
-            write(sfWritefd,"stop\n",5);
-        }
-        hint=false;
-    }
+    void toogleHint() {
+        hint = !hint;
 
-    void enableHint(){
-        if (hint)
-            return;
-        hint=true;
+        clearBestMove();
+
         if (playerIsAi[currentPlayer])
             return;
-        sendPositionsCmd();
-        write(sfWritefd,"go infinite\n", 12);
+        if (hint) {
+            sendPositionsCmd();
+            write(sfWritefd,"go infinite\n", 12);
+        }else{
+            write(sfWritefd,"stop\n",5);
+        }
     }
 
     void sendPositionsCmd (){
@@ -261,7 +256,7 @@ public:
         }else if (strncmp (lineBuf, "uciok", 5)==0){
 
         }else if (strncmp (lineBuf, "info", 4)==0){
-            if (playerIsAi[currentPlayer])
+            if (playerIsAi[currentPlayer] || !hint)
                 return;
             ptr=5;
             ptr+=skipnspace(lineBuf+ptr,2);
@@ -652,7 +647,7 @@ public:
         strncpy(movesBuffer, "position startpos moves ", 24);
         movesPtr = previouMovesPtr = 24;
 
-        enableHint();
+        //enableHint();
     }
     void switchPlayer () {
         if (currentPlayer==White)
@@ -662,17 +657,22 @@ public:
 
         startTurn();
     }
+    void clearBestMove () {
+        if (bestMoveOrig.x >=0){
+            subCaseLight(bestMoveOrig, bestMoveColor);
+            subCaseLight(bestMoveTarget, bestMoveColor);
+        }
+        bestMoveOrig = bestMoveTarget = glm::vec2(-1);
+    }
     void startTurn (){
         if (selectedSquare.x >= 0)
             subCaseLight(selectedSquare, selectedColor);
         if (hoverSquare.x >= 0)
             subCaseLight(hoverSquare, hoverColor);
-        if (bestMoveOrig.x >=0){
-            subCaseLight(bestMoveOrig, bestMoveColor);
-            subCaseLight(bestMoveTarget, bestMoveColor);
-        }
 
-        hoverSquare = selectedSquare = bestMoveOrig = bestMoveTarget = glm::vec2(-1);
+        hoverSquare = selectedSquare = glm::vec2(-1);
+
+        clearBestMove();
 
         for (int i=0; i<validMoves.size(); i++)
             subCaseLight(validMoves[i], validMoveColor);
@@ -722,14 +722,9 @@ public:
         //for (int i=0; i<mod->primitives.size(); i++)
         //    printf("primitive: %s\n", mod->primitives[i].name.c_str());
 
-        for (int y=0; y<8; y++) {
-            for (int x=0; x<8; x++) {
-                casesInstances[x][y] = mod->addInstance(caseX[x] + std::to_string(y+1) + "\0", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
-            }
-        }
 
 
-        selInstanceIdx = mod->addInstance("circle", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+        //selInstanceIdx = mod->addInstance("circle", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
 
 
         addPiece("white_rook",  Rook, White,    0, 0);
@@ -755,6 +750,12 @@ public:
 
         for (int i=0; i<8; i++)
             addPiece("black_pawn", Pawn, Black, i, 6);
+
+        for (int y=0; y<8; y++) {
+            for (int x=0; x<8; x++) {
+                casesInstances[x][y] = mod->addInstance(caseX[x] + std::to_string(y+1) + "\0", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+            }
+        }
     }
     virtual void prepare() {
         vkPbrRenderer::prepare();
@@ -910,6 +911,13 @@ public:
         if (hoverSquare.x >= 0)
             addCaseLight(hoverSquare, hoverColor);
 
+    }
+    virtual void keyPressed(uint32_t key) {
+        switch (key) {
+        case 43://h
+            toogleHint();
+            break;
+        }
     }
 
     void render () {
