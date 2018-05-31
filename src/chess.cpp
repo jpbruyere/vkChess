@@ -1,5 +1,5 @@
 /*
-* Vulkan Example - Physical based rendering a glTF 2.0 model (metal/roughness workflow) with image based lighting
+* Vulkan Chess PBR - Physical based rendering with glTF 2.0 model (metal/roughness workflow) with image based lighting
 *
 * Note: Requires the separate asset pack (see data/README.md)
 *
@@ -30,9 +30,6 @@
 
 #include <glm/gtx/spline.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
-
-//#define GLM_DEPTH_CLIP_SPACE = GLM_DEPTH_NEGATIVE_ONE_TO_ONE
-//GLM_DEPTH_ZERO_TO_ONE
 
 #define CAPTURE_ZONE_HEIGHT 5
 /*
@@ -76,13 +73,13 @@ public:
 
     VulkanExample() : vkPbrRenderer()
     {
-        title = "Vulkan glTf 2.0 PBR";
+        title = "Vulkan Chess glTf 2.0 PBR";
         camera.type = Camera::CameraType::firstperson;
         camera.movementSpeed = 8.0f;
-        camera.setPerspective(70.0f, (float)width / (float)height, 0.1f, 50.0f);
         camera.rotationSpeed = 0.25f;
+        camera.setPerspective(50.0f, (float)width / (float)height, 0.1f, 50.0f);
         camera.setRotation({ 42.0f, 0.0f, 0.0f });
-        camera.setPosition({ .0f, -7.2f, -10.f });
+        camera.setPosition({ .0f, -11.f, -14.f });
 
         settings.validation = true;
     }
@@ -454,9 +451,11 @@ public:
 
         if (movesPtr < 25)
             return;
+        std::cout << "Previous  : " + std::string(movesBuffer,movesPtr) << std::endl;
         replay (previouMovesPtr);
         if (playerIsAi[currentPlayer] && movesPtr>24)
             replay (previouMovesPtr);
+        std::cout << "After undo: " + std::string(movesBuffer,movesPtr) << std::endl;
         rebuildCommandBuffers();
         for (int i=0; i<32; i++){
             glm::vec3 curPos = pieces[i].getCurrentPosition(mod);

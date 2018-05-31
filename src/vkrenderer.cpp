@@ -264,9 +264,7 @@ void vkRenderer::prepareFrameBuffer () {
 //        attachments[1] = depthStencil.view;
 //    }
 
-    VkFramebufferCreateInfo frameBufferCI{};
-    frameBufferCI.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    frameBufferCI.pNext = NULL;
+    VkFramebufferCreateInfo frameBufferCI = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
     frameBufferCI.renderPass = renderPass;
     //frameBufferCI.attachmentCount = settings.multiSampling ? 4 :2;
     frameBufferCI.attachmentCount = 4;

@@ -119,7 +119,7 @@ public:
         VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_4_BIT;
     } settings;
 
-    DepthStencil depthStencil;
+    vks::Texture depthStencil;
 
     struct GamePadState {
         glm::vec2 axisLeft = glm::vec2(0.0f);

@@ -15,7 +15,8 @@ namespace vks
         VkImageLayout       imageLayout;
         VkDescriptorImageInfo descriptor;
 
-        void create (VkImageType imageType, VkFormat format, uint32_t width, uint32_t height,
+        void create (VulkanDevice* _device,
+                        VkImageType imageType, VkFormat format, uint32_t width, uint32_t height,
                         VkImageUsageFlags usage, VkMemoryPropertyFlags memProps = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                         VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL,
                         uint32_t  mipLevels = 1,
@@ -24,6 +25,7 @@ namespace vks
                         VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT,
                         VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                         VkSharingMode sharingMode = VK_SHARING_MODE_EXCLUSIVE) {
+            device = _device;
             infos.imageType = imageType;
             infos.format = format;
             infos.extent = {width, height, 1};
@@ -60,18 +62,16 @@ namespace vks
                  VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                  VkSharingMode sharingMode = VK_SHARING_MODE_EXCLUSIVE)
         {
-            device = _device;
-            create(imageType, format, width, height, usage, memProps, tiling, mipLevels, arrayLayers,
+            create(_device, imageType, format, width, height, usage, memProps, tiling, mipLevels, arrayLayers,
                    flags, samples, initialLayout, sharingMode);
         }
         Texture (vks::VulkanDevice*  _device,  VkQueue copyQueue, VkImageType imageType, VkFormat format,
                  std::vector<Texture> texArray, uint32_t width, uint32_t height,
                  VkImageUsageFlags _usage = VK_IMAGE_USAGE_SAMPLED_BIT) {
 
-            device = _device;
             uint32_t mipLevels = (uint32_t)floor(log2(std::max(width, height))) + 1;
 
-            create(imageType, format, width, height,
+            create(_device, imageType, format, width, height,
                    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | _usage,
                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL, mipLevels, texArray.size());
 

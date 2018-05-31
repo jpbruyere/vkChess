@@ -193,8 +193,7 @@ VkResult VulkanExampleBase::createInstance(bool enableValidation)
     this->settings.validation = true;
 #endif
 
-    VkApplicationInfo appInfo = {};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    VkApplicationInfo appInfo = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
     appInfo.pApplicationName = name.c_str();
     appInfo.pEngineName = name.c_str();
     appInfo.apiVersion = VK_API_VERSION_1_0;
@@ -214,15 +213,13 @@ VkResult VulkanExampleBase::createInstance(bool enableValidation)
     instanceExtensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
 #endif
 
-    VkInstanceCreateInfo instanceCreateInfo = {};
-    instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    instanceCreateInfo.pNext = NULL;
+    VkInstanceCreateInfo instanceCreateInfo = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     instanceCreateInfo.pApplicationInfo = &appInfo;
+
     if (instanceExtensions.size() > 0)
     {
-        if (settings.validation) {
+        if (settings.validation)
             instanceExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-        }
         instanceCreateInfo.enabledExtensionCount = (uint32_t)instanceExtensions.size();
         instanceCreateInfo.ppEnabledExtensionNames = instanceExtensions.data();
     }
@@ -259,8 +256,7 @@ std::string VulkanExampleBase::getWindowTitle()
 
 void VulkanExampleBase::createCommandBuffers()
 {
-    VkCommandBufferAllocateInfo cmdBufAllocateInfo{};
-    cmdBufAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    VkCommandBufferAllocateInfo cmdBufAllocateInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
     cmdBufAllocateInfo.commandPool = cmdPool;
     cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     cmdBufAllocateInfo.commandBufferCount = 1;
@@ -280,29 +276,14 @@ void VulkanExampleBase::prepare()
     initSwapchain();
     setupSwapChain();
 
-    /*
-        Synchronization primitives
-    */
-    VkSemaphoreCreateInfo semaphoreCI = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    VK_CHECK_RESULT(vkCreateSemaphore(device, &semaphoreCI, nullptr, &presentCompleteSemaphore));
+    presentCompleteSemaphore = vulkanDevice->createSemaphore();
 
-    /*
-        Command pool
-    */
     VkCommandPoolCreateInfo cmdPoolInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     cmdPoolInfo.queueFamilyIndex = swapChain.queueNodeIndex;
     cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     VK_CHECK_RESULT(vkCreateCommandPool(device, &cmdPoolInfo, nullptr, &cmdPool));
 
-    /*
-        Command buffers
-    */
-
     createCommandBuffers();
-
-    /*
-        Render pass
-    */
 
     if (settings.multiSampling) {
         std::array<VkAttachmentDescription, 2> attachments = {};
@@ -327,19 +308,13 @@ void VulkanExampleBase::prepare()
         attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-        VkAttachmentReference colorReference = {};
-        colorReference.attachment = 0;
-        colorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentReference depthReference = {};
-        depthReference.attachment = 1;
-        depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
+        VkAttachmentReference colorReference = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        VkAttachmentReference depthReference = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
 
         VkSubpassDescription subpass = {};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorReference;
+        subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount    = 1;
+        subpass.pColorAttachments       = &colorReference;
         subpass.pDepthStencilAttachment = &depthReference;
 
         std::array<VkSubpassDependency, 2> dependencies;
@@ -360,8 +335,7 @@ void VulkanExampleBase::prepare()
         dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
         dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-        VkRenderPassCreateInfo renderPassCI = {};
-        renderPassCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        VkRenderPassCreateInfo renderPassCI = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
         renderPassCI.attachmentCount = attachments.size();
         renderPassCI.pAttachments = attachments.data();
         renderPassCI.subpassCount = 1;
@@ -429,8 +403,7 @@ void VulkanExampleBase::prepare()
         dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
         dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-        VkRenderPassCreateInfo renderPassCI{};
-        renderPassCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        VkRenderPassCreateInfo renderPassCI = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
         renderPassCI.attachmentCount = static_cast<uint32_t>(attachments.size());
         renderPassCI.pAttachments = attachments.data();
         renderPassCI.subpassCount = 1;
@@ -440,16 +413,9 @@ void VulkanExampleBase::prepare()
         VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassCI, nullptr, &renderPass));
     }
 
-    /*
-        Pipeline cache
-    */
-    VkPipelineCacheCreateInfo pipelineCacheCreateInfo{};
-    pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
     VK_CHECK_RESULT(vkCreatePipelineCache(device, &pipelineCacheCreateInfo, nullptr, &pipelineCache));
 
-    /*
-        Frame buffer
-    */
     setupFrameBuffer();
 
     swapChain.multisampleTarget = &multisampleTarget;
@@ -766,27 +732,23 @@ VulkanExampleBase::~VulkanExampleBase()
     // Clean up Vulkan resources
     swapChain.cleanup();
     destroyCommandBuffers();
-    vkDestroyRenderPass(device, renderPass, nullptr);
-    vkDestroyFramebuffer(device, frameBuffer, nullptr);
-    vkDestroyImageView(device, depthStencil.view, nullptr);
-    vkDestroyImage(device, depthStencil.image, nullptr);
-    vkFreeMemory(device, depthStencil.mem, nullptr);
-    vkDestroyPipelineCache(device, pipelineCache, nullptr);
-    vkDestroyCommandPool(device, cmdPool, nullptr);
-    vkDestroySemaphore(device, presentCompleteSemaphore, nullptr);
+    vkDestroyRenderPass     (device, renderPass, nullptr);
+    vkDestroyFramebuffer    (device, frameBuffer, nullptr);
+    vkDestroyPipelineCache  (device, pipelineCache, nullptr);
+    vkDestroyCommandPool    (device, cmdPool, nullptr);
+
+    vulkanDevice->destroySemaphore(presentCompleteSemaphore);
+
+    depthStencil.destroy();
 
     if (settings.multiSampling) {
-        vkDestroyImage(device, multisampleTarget.color.image, nullptr);
-        vkDestroyImageView(device, multisampleTarget.color.view, nullptr);
-        vkFreeMemory(device, multisampleTarget.color.memory, nullptr);
-        vkDestroyImage(device, multisampleTarget.depth.image, nullptr);
-        vkDestroyImageView(device, multisampleTarget.depth.view, nullptr);
-        vkFreeMemory(device, multisampleTarget.depth.memory, nullptr);
+        multisampleTarget.color.destroy();
+        multisampleTarget.depth.destroy();
     }
     delete vulkanDevice;
-    if (settings.validation) {
+    if (settings.validation)
         vkDestroyDebugReportCallback(instance, debugReportCallback, nullptr);
-    }
+
     vkDestroyInstance(instance, nullptr);
 #if defined(_DIRECT2DISPLAY)
 #elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
@@ -1825,159 +1787,42 @@ void VulkanExampleBase::buildCommandBuffers() {}
 
 void VulkanExampleBase::setupFrameBuffer()
 {
-    /*
-    MSAA
-    */
     if (settings.multiSampling) {
-        // Check if device supports requested sample count for color and depth frame buffer
-        //assert((deviceProperties.limits.framebufferColorSampleCounts >= sampleCount) && (deviceProperties.limits.framebufferDepthSampleCounts >= sampleCount));
 
-        VkImageCreateInfo imageCI{};
-        imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageCI.imageType = VK_IMAGE_TYPE_2D;
-        imageCI.format = swapChain.colorFormat;
-        imageCI.extent.width = width;
-        imageCI.extent.height = height;
-        imageCI.extent.depth = 1;
-        imageCI.mipLevels = 1;
-        imageCI.arrayLayers = 1;
-        imageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageCI.samples = settings.sampleCount;
-        imageCI.usage = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        imageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &multisampleTarget.color.image));
+        multisampleTarget.color.create (vulkanDevice,
+                                        VK_IMAGE_TYPE_2D, swapChain.colorFormat, width, height,
+                                        VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL, 1, 1, 0,
+                                        settings.sampleCount);
+        multisampleTarget.color.createView(VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT,1,1);
 
-        VkMemoryRequirements memReqs;
-        vkGetImageMemoryRequirements(device, multisampleTarget.color.image, &memReqs);
-        VkMemoryAllocateInfo memAllocInfo{};
-        memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        memAllocInfo.allocationSize = memReqs.size;
-        VkBool32 lazyMemTypePresent;
-        memAllocInfo.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT, &lazyMemTypePresent);
-        if (!lazyMemTypePresent) {
-            memAllocInfo.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        }
-        VK_CHECK_RESULT(vkAllocateMemory(device, &memAllocInfo, nullptr, &multisampleTarget.color.memory));
-        vkBindImageMemory(device, multisampleTarget.color.image, multisampleTarget.color.memory, 0);
-
-        // Create image view for the MSAA target
-        VkImageViewCreateInfo imageViewCI{};
-        imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        imageViewCI.image = multisampleTarget.color.image;
-        imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewCI.format = swapChain.colorFormat;
-        imageViewCI.components.r = VK_COMPONENT_SWIZZLE_R;
-        imageViewCI.components.g = VK_COMPONENT_SWIZZLE_G;
-        imageViewCI.components.b = VK_COMPONENT_SWIZZLE_B;
-        imageViewCI.components.a = VK_COMPONENT_SWIZZLE_A;
-        imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        imageViewCI.subresourceRange.levelCount = 1;
-        imageViewCI.subresourceRange.layerCount = 1;
-        VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &multisampleTarget.color.view));
-
-        // Depth target
-        imageCI.imageType = VK_IMAGE_TYPE_2D;
-        imageCI.format = depthFormat;
-        imageCI.extent.width = width;
-        imageCI.extent.height = height;
-        imageCI.extent.depth = 1;
-        imageCI.mipLevels = 1;
-        imageCI.arrayLayers = 1;
-        imageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageCI.samples = settings.sampleCount;
-        imageCI.usage = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        imageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &multisampleTarget.depth.image));
-
-        vkGetImageMemoryRequirements(device, multisampleTarget.depth.image, &memReqs);
-        memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        memAllocInfo.allocationSize = memReqs.size;
-        memAllocInfo.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT, &lazyMemTypePresent);
-        if (!lazyMemTypePresent) {
-            memAllocInfo.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        }
-        VK_CHECK_RESULT(vkAllocateMemory(device, &memAllocInfo, nullptr, &multisampleTarget.depth.memory));
-        vkBindImageMemory(device, multisampleTarget.depth.image, multisampleTarget.depth.memory, 0);
-
-        // Create image view for the MSAA target
-        imageViewCI.image = multisampleTarget.depth.image;
-        imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewCI.format = depthFormat;
-        imageViewCI.components.r = VK_COMPONENT_SWIZZLE_R;
-        imageViewCI.components.g = VK_COMPONENT_SWIZZLE_G;
-        imageViewCI.components.b = VK_COMPONENT_SWIZZLE_B;
-        imageViewCI.components.a = VK_COMPONENT_SWIZZLE_A;
-        imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-        imageViewCI.subresourceRange.levelCount = 1;
-        imageViewCI.subresourceRange.layerCount = 1;
-        VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &multisampleTarget.depth.view));
+        multisampleTarget.depth.create (vulkanDevice,
+                                        VK_IMAGE_TYPE_2D, depthFormat, width, height,
+                                        VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL, 1, 1, 0,
+                                        settings.sampleCount);
+        multisampleTarget.depth.createView(VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT);
     }
 
-
     // Depth/Stencil attachment is the same for all frame buffers
+    depthStencil.create (vulkanDevice,
+                                    VK_IMAGE_TYPE_2D, depthFormat, width, height,
+                                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+    depthStencil.createView(VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT);
 
-    VkImageCreateInfo image = {};
-    image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    image.pNext = NULL;
-    image.imageType = VK_IMAGE_TYPE_2D;
-    image.format = depthFormat;
-    image.extent = { width, height, 1 };
-    image.mipLevels = 1;
-    image.arrayLayers = 1;
-    image.samples = VK_SAMPLE_COUNT_1_BIT;
-    image.tiling = VK_IMAGE_TILING_OPTIMAL;
-    image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    image.flags = 0;
 
-    VkMemoryAllocateInfo mem_alloc = {};
-    mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    mem_alloc.pNext = NULL;
-    mem_alloc.allocationSize = 0;
-    mem_alloc.memoryTypeIndex = 0;
+    VkImageView attachments[] = {
+        multisampleTarget.color.view,
+        multisampleTarget.depth.view
+    };
 
-    VkImageViewCreateInfo depthStencilView = {};
-    depthStencilView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    depthStencilView.pNext = NULL;
-    depthStencilView.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    depthStencilView.format = depthFormat;
-    depthStencilView.flags = 0;
-    depthStencilView.subresourceRange = {};
-    depthStencilView.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-    depthStencilView.subresourceRange.baseMipLevel = 0;
-    depthStencilView.subresourceRange.levelCount = 1;
-    depthStencilView.subresourceRange.baseArrayLayer = 0;
-    depthStencilView.subresourceRange.layerCount = 1;
-
-    VkMemoryRequirements memReqs;
-    VK_CHECK_RESULT(vkCreateImage(device, &image, nullptr, &depthStencil.image));
-    vkGetImageMemoryRequirements(device, depthStencil.image, &memReqs);
-    mem_alloc.allocationSize = memReqs.size;
-    mem_alloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    VK_CHECK_RESULT(vkAllocateMemory(device, &mem_alloc, nullptr, &depthStencil.mem));
-    VK_CHECK_RESULT(vkBindImageMemory(device, depthStencil.image, depthStencil.mem, 0));
-
-    depthStencilView.image = depthStencil.image;
-    VK_CHECK_RESULT(vkCreateImageView(device, &depthStencilView, nullptr, &depthStencil.view));
-
-    //
-
-    VkImageView attachments[2];
-
-    attachments[0] = multisampleTarget.color.view;
-    attachments[1] = multisampleTarget.depth.view;
-
-    VkFramebufferCreateInfo frameBufferCI{};
-    frameBufferCI.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    frameBufferCI.pNext = NULL;
-    frameBufferCI.renderPass = renderPass;
-    frameBufferCI.attachmentCount = 2;
-    frameBufferCI.pAttachments = attachments;
-    frameBufferCI.width = width;
-    frameBufferCI.height = height;
-    frameBufferCI.layers = 1;
-
+    VkFramebufferCreateInfo frameBufferCI = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+    frameBufferCI.renderPass        = renderPass;
+    frameBufferCI.attachmentCount   = 2;
+    frameBufferCI.pAttachments      = attachments;
+    frameBufferCI.width             = width;
+    frameBufferCI.height            = height;
+    frameBufferCI.layers            = 1;
     VK_CHECK_RESULT(vkCreateFramebuffer(device, &frameBufferCI, nullptr, &frameBuffer));
 }
 
@@ -2003,9 +1848,7 @@ void VulkanExampleBase::windowResize()
     width = destWidth;
     height = destHeight;
     setupSwapChain();
-    vkDestroyImageView(device, depthStencil.view, nullptr);
-    vkDestroyImage(device, depthStencil.image, nullptr);
-    vkFreeMemory(device, depthStencil.mem, nullptr);
+    depthStencil.destroy();
     vkDestroyFramebuffer(device, frameBuffer, nullptr);
 
     setupFrameBuffer();

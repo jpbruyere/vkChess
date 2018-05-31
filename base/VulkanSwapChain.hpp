@@ -19,6 +19,8 @@
 #include <vulkan/vulkan.h>
 #include "macros.h"
 
+#include "texture.hpp"
+
 #ifdef __ANDROID__
 #include "VulkanAndroid.h"
 #endif
@@ -29,22 +31,8 @@ typedef struct _SwapChainBuffers {
 } SwapChainBuffer;
 
 struct MultisampleTarget {
-    struct {
-        VkImage image;
-        VkImageView view;
-        VkDeviceMemory memory;
-    } color;
-    struct {
-        VkImage image;
-        VkImageView view;
-        VkDeviceMemory memory;
-    } depth;
-};
-
-struct DepthStencil {
-    VkImage image;
-    VkDeviceMemory mem;
-    VkImageView view;
+    vks::Texture color;
+    vks::Texture depth;
 };
 
 class VulkanSwapChain
@@ -77,8 +65,8 @@ public:
     /** @brief Queue family index of the detected graphics and presenting device queue */
     uint32_t queueNodeIndex = UINT32_MAX;
 
-    MultisampleTarget* multisampleTarget;
-    DepthStencil* depthStencil;
+    MultisampleTarget*  multisampleTarget;
+    vks::Texture*       depthStencil;
 
     /** @brief Creates the platform specific surface abstraction of the native platform window used for presentation */
 #if defined(VK_USE_PLATFORM_WIN32_KHR)

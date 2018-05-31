@@ -93,8 +93,7 @@ namespace vks
 #endif
             assert(!tex2D.empty());
 
-            this->device = _device;
-            create(VK_IMAGE_TYPE_2D, format,
+            create(_device, VK_IMAGE_TYPE_2D, format,
                    static_cast<uint32_t>(tex2D[0].extent().x),static_cast<uint32_t>(tex2D[0].extent().y),
                    imageUsageFlags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                     VK_IMAGE_TILING_OPTIMAL,static_cast<uint32_t>(tex2D.levels()));
@@ -141,8 +140,7 @@ namespace vks
 #endif
             assert(!texCube.empty());
 
-            this->device = _device;
-            create(VK_IMAGE_TYPE_2D, format,
+            create(_device, VK_IMAGE_TYPE_2D, format,
                    static_cast<uint32_t>(texCube.extent().x),static_cast<uint32_t>(texCube[0].extent().y),
                    imageUsageFlags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                     VK_IMAGE_TILING_OPTIMAL,static_cast<uint32_t>(texCube.levels()), 6, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);

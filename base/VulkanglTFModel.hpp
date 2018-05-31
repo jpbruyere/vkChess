@@ -321,9 +321,9 @@ namespace vkglTF
                 uint32_t mipLevels = loadOnly ? 1 :
                             static_cast<uint32_t>(floor(log2(std::max(gltfimage.width, gltfimage.height))) + 1.0);
 
-                vks::Texture texture (device);
+                vks::Texture texture;
 
-                texture.create(
+                texture.create(device,
                        VK_IMAGE_TYPE_2D,VK_FORMAT_R8G8B8A8_UNORM, gltfimage.width, gltfimage.height,
                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
