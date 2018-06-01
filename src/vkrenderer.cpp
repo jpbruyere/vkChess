@@ -88,190 +88,87 @@ void vkRenderer::prepare() {
 
 void vkRenderer::prepareRenderPass()
 {
+    VkAttachmentDescription attachments[] = {
+        {0, //ms
+            swapChain->colorFormat, sampleCount,
+            VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        },{0,//ms resolve
+           swapChain->colorFormat, VK_SAMPLE_COUNT_1_BIT,
+           VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+           VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+           VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+        },{0,//ms depth
+           depthFormat, sampleCount,
+           VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
+           VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        }
+    };
+
+    VkAttachmentReference colorReference    = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference resolveReference  = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference depthReference    = {2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorReference;
+    subpass.pResolveAttachments = &resolveReference;
+    subpass.pDepthStencilAttachment = &depthReference;
+
+
+    VkSubpassDependency dependencies[] =
+    {
+        { VK_SUBPASS_EXTERNAL, VK_SUBPASS_EXTERNAL,
+          VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
+          VK_DEPENDENCY_BY_REGION_BIT}
+
+//        { VK_SUBPASS_EXTERNAL, 0,
+//          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+//          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+//          VK_DEPENDENCY_BY_REGION_BIT},
+//        { 0, VK_SUBPASS_EXTERNAL,
+//          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+//          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
+//          VK_DEPENDENCY_BY_REGION_BIT},
+    };
+
+    VkRenderPassCreateInfo renderPassCI = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+    renderPassCI.attachmentCount    = 3;
+    renderPassCI.pAttachments       = attachments;
+    renderPassCI.subpassCount       = 1;
+    renderPassCI.pSubpasses         = &subpass;
+    renderPassCI.dependencyCount    = 1;
+    renderPassCI.pDependencies      = dependencies;
+    VK_CHECK_RESULT(vkCreateRenderPass(device->logicalDevice, &renderPassCI, nullptr, &renderPass));
     if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
-        std::array<VkAttachmentDescription, 4> attachments = {};
-
-        // Multisampled attachment that we render to
-        attachments[0].format = swapChain->colorFormat;
-        attachments[0].samples = sampleCount;
-        attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        // This is the frame buffer attachment to where the multisampled image
-        // will be resolved to and which will be presented to the swapchain
-        attachments[1].format = swapChain->colorFormat;
-        attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[1].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-        // Multisampled depth attachment we render to
-        attachments[2].format = depthFormat;
-        attachments[2].samples = sampleCount;
-        attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[2].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        attachments[2].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        // Depth resolve attachment
-        attachments[3].format = depthFormat;
-        attachments[3].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[3].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[3].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[3].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[3].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[3].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        attachments[3].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentReference colorReference = {};
-        colorReference.attachment = 0;
-        colorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentReference depthReference = {};
-        depthReference.attachment = 2;
-        depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        // Resolve attachment reference for the color attachment
-        VkAttachmentReference resolveReference = {};
-        resolveReference.attachment = 1;
-        resolveReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkSubpassDescription subpass = {};
-        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass.colorAttachmentCount = 1;
-        subpass.pColorAttachments = &colorReference;
-        // Pass our resolve attachments to the sub pass
-        subpass.pResolveAttachments = &resolveReference;
-        subpass.pDepthStencilAttachment = &depthReference;
-
-        std::array<VkSubpassDependency, 2> dependencies;
-
-        dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependencies[0].dstSubpass = 0;
-        dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependencies[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-        dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-        dependencies[1].srcSubpass = 0;
-        dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-        dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-        dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-        dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-        VkRenderPassCreateInfo renderPassCI = {};
-        renderPassCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassCI.attachmentCount = attachments.size();
-        renderPassCI.pAttachments = attachments.data();
-        renderPassCI.subpassCount = 1;
-        renderPassCI.pSubpasses = &subpass;
-        renderPassCI.dependencyCount = 2;
-        renderPassCI.pDependencies = dependencies.data();
-        VK_CHECK_RESULT(vkCreateRenderPass(device->logicalDevice, &renderPassCI, nullptr, &renderPass));
     }
-    else {
-        std::array<VkAttachmentDescription, 2> attachments = {};
-        // Color attachment
-        attachments[0].format = swapChain->colorFormat;
-        attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        // Depth attachment
-        attachments[1].format = depthFormat;
-        attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-        VkAttachmentReference colorReference = {};
-        colorReference.attachment = 0;
-        colorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-        VkAttachmentReference depthReference = {};
-        depthReference.attachment = 1;
-        depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-        VkSubpassDescription subpassDescription = {};
-        subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpassDescription.colorAttachmentCount = 1;
-        subpassDescription.pColorAttachments = &colorReference;
-        subpassDescription.pDepthStencilAttachment = &depthReference;
-        subpassDescription.inputAttachmentCount = 0;
-        subpassDescription.pInputAttachments = nullptr;
-        subpassDescription.preserveAttachmentCount = 0;
-        subpassDescription.pPreserveAttachments = nullptr;
-        subpassDescription.pResolveAttachments = nullptr;
-
-        // Subpass dependencies for layout transitions
-        std::array<VkSubpassDependency, 2> dependencies;
-
-        dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependencies[0].dstSubpass = 0;
-        dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-        dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-        dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-        dependencies[1].srcSubpass = 0;
-        dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-        dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-        dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-        dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-        VkRenderPassCreateInfo renderPassCI{};
-        renderPassCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassCI.attachmentCount = static_cast<uint32_t>(attachments.size());
-        renderPassCI.pAttachments = attachments.data();
-        renderPassCI.subpassCount = 1;
-        renderPassCI.pSubpasses = &subpassDescription;
-        renderPassCI.dependencyCount = static_cast<uint32_t>(dependencies.size());
-        renderPassCI.pDependencies = dependencies.data();
-        VK_CHECK_RESULT(vkCreateRenderPass(device->logicalDevice, &renderPassCI, nullptr, &renderPass));
-    }
     prepareFrameBuffer();
 }
 void vkRenderer::prepareFrameBuffer () {
-    VkImageView attachments[4];
+    VkImageView attachments[3];
 
 //    if (settings.multiSampling) {
         attachments[0] = swapChain->multisampleTarget->color.view;
         attachments[2] = swapChain->multisampleTarget->depth.view;
-        attachments[3] = swapChain->depthStencil->view;
+        //attachments[3] = swapChain->depthStencil->view;
 //    }
 //    else {
 //        attachments[1] = depthStencil.view;
 //    }
 
     VkFramebufferCreateInfo frameBufferCI = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-    frameBufferCI.renderPass = renderPass;
+    frameBufferCI.renderPass        = renderPass;
     //frameBufferCI.attachmentCount = settings.multiSampling ? 4 :2;
-    frameBufferCI.attachmentCount = 4;
-    frameBufferCI.pAttachments = attachments;
-    frameBufferCI.width = swapChain->extent.width;
-    frameBufferCI.height = swapChain->extent.height;
-    frameBufferCI.layers = 1;
+    frameBufferCI.attachmentCount   = 3;
+    frameBufferCI.pAttachments      = attachments;
+    frameBufferCI.width             = swapChain->extent.width;
+    frameBufferCI.height            = swapChain->extent.height;
+    frameBufferCI.layers            = 1;
 
     // Create frame buffers for every swap chain image
     frameBuffers.resize(swapChain->imageCount);

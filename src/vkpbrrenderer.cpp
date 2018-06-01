@@ -28,7 +28,7 @@ vkPbrRenderer::~vkPbrRenderer() {
 
     for (int i=0; i<models2.size(); i++)
         models2[i].destroy();
-    models.skybox.destroy();
+    skybox.destroy();
 
     sharedUBOs.matrices.destroy();
     sharedUBOs.params.destroy();
@@ -82,7 +82,7 @@ void vkPbrRenderer::buildCommandBuffers()
 
     vkCmdBindPipeline(drawCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
 
-    models.skybox.buildCommandBuffer(drawCmdBuffer, pipelineLayout);
+    skybox.buildCommandBuffer(drawCmdBuffer, pipelineLayout);
 
 
     // Opaque primitives first
@@ -140,7 +140,7 @@ void vkPbrRenderer::loadAssets()
 //    };
 //    textures.environmentCube.buildFromImages (cubeMaps, 2048, VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
     textures.environmentCube.loadFromFile(assetpath + "textures/papermill_hdr16f_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
-    models.skybox.loadFromFile(assetpath + "models/Box/glTF-Embedded/Box.gltf", vulkanDevice, queue);
+    skybox.loadFromFile(assetpath + "models/Box/glTF-Embedded/Box.gltf", vulkanDevice, queue);
 }
 
 void vkPbrRenderer::setupDescriptors()
@@ -730,10 +730,10 @@ void vkPbrRenderer::generateCubemaps()
         VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassCI, nullptr, &renderpass));
 
         struct Offscreen {
-            VkImage image;
-            VkImageView view;
-            VkDeviceMemory memory;
-            VkFramebuffer framebuffer;
+            VkImage         image;
+            VkImageView     view;
+            VkDeviceMemory  memory;
+            VkFramebuffer   framebuffer;
         } offscreen;
 
         // Create offscreen framebuffer
@@ -964,8 +964,7 @@ void vkPbrRenderer::generateCubemaps()
         VkClearValue clearValues[1];
         clearValues[0].color = { { 0.0f, 0.0f, 0.2f, 0.0f } };
 
-        VkRenderPassBeginInfo renderPassBeginInfo{};
-        renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        VkRenderPassBeginInfo renderPassBeginInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         renderPassBeginInfo.renderPass = renderpass;
         renderPassBeginInfo.framebuffer = offscreen.framebuffer;
         renderPassBeginInfo.renderArea.extent.width = dim;
@@ -984,24 +983,13 @@ void vkPbrRenderer::generateCubemaps()
 
         VkCommandBuffer cmdBuf = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
 
-        VkViewport viewport{};
-        viewport.width = (float)dim;
-        viewport.height = (float)dim;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-
-        VkRect2D scissor{};
-        scissor.extent.width = width;
-        scissor.extent.height = height;
+        VkViewport  viewport = {0, 0, (float)dim, (float)dim, 0.0f, 1.0f};
+        VkRect2D    scissor  = {{}, {width, height}};
 
         vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
         vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-        VkImageSubresourceRange subresourceRange{};
-        subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        subresourceRange.baseMipLevel = 0;
-        subresourceRange.levelCount = numMips;
-        subresourceRange.layerCount = 6;
+        VkImageSubresourceRange subresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, numMips,0 , 6};
 
         // Change image layout for all cubemap faces to transfer destination
         {
@@ -1041,17 +1029,9 @@ void vkPbrRenderer::generateCubemaps()
                 vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
                 vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelinelayout, 0, 1, &descriptorset, 0, NULL);
 
-                VkDeviceSize offsets[1] = { 0 };
-
-                models.skybox.buildCommandBuffer(cmdBuf, pipelinelayout);
+                skybox.buildCommandBuffer(cmdBuf, pipelinelayout);
 
                 vkCmdEndRenderPass(cmdBuf);
-
-                VkImageSubresourceRange subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-                subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                subresourceRange.baseMipLevel = 0;
-                subresourceRange.levelCount = numMips;
-                subresourceRange.layerCount = 6;
 
                 {
                     VkImageMemoryBarrier imageMemoryBarrier{};

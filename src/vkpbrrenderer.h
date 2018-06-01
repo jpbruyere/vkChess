@@ -25,9 +25,8 @@ public:
         vks::TextureCubeMap prefilteredCube;
     } textures;
 
-    struct Models {
-        vkglTF::Model skybox;
-    } models;
+    vkglTF::Model skybox;
+
 
     struct UniformBuffers {
         vks::Buffer matrices;
