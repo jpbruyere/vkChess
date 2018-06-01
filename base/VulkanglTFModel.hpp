@@ -336,7 +336,7 @@ namespace vkglTF
 
                     texture.createView(VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
                     texture.createSampler(VK_FILTER_LINEAR,VK_SAMPLER_ADDRESS_MODE_REPEAT,VK_SAMPLER_MIPMAP_MODE_LINEAR,
-                                  (float)mipLevels,VK_TRUE,8.0f,VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE);
+                                  VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE);
 
                     texture.updateDescriptor();
                 }

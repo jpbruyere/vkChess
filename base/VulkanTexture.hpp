@@ -28,38 +28,6 @@
 
 namespace vks
 {
-    /*class Texture {
-    public:
-        vks::VulkanDevice *device;
-        VkImage image;
-        VkImageLayout imageLayout;
-        VkDeviceMemory deviceMemory;
-        VkImageView view;
-        uint32_t width, height;
-        uint32_t mipLevels;
-        uint32_t layerCount;
-        VkDescriptorImageInfo descriptor;
-        VkSampler sampler;
-
-        void updateDescriptor()
-        {
-            descriptor.sampler = sampler;
-            descriptor.imageView = view;
-            descriptor.imageLayout = imageLayout;
-        }
-
-        void destroy()
-        {
-            vkDestroyImageView(device->logicalDevice, view, nullptr);
-            vkDestroyImage(device->logicalDevice, image, nullptr);
-            if (sampler)
-            {
-                vkDestroySampler(device->logicalDevice, sampler, nullptr);
-            }
-            vkFreeMemory(device->logicalDevice, deviceMemory, nullptr);
-        }
-    };*/
-
     class Texture2D : public Texture {
     public:
         void loadFromFile(
@@ -109,13 +77,106 @@ namespace vks
 
     class TextureCubeMap : public Texture {
     public:
+        void buildFromImages(const std::vector<std::string>& mapDic, uint32_t textureSize,
+                             VkFormat _format,
+                             vks::VulkanDevice *_device,
+                             VkQueue copyQueue,
+                             VkImageUsageFlags _imageUsageFlags = VK_IMAGE_USAGE_SAMPLED_BIT,
+                             VkImageLayout _imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL){
+
+            create(_device, VK_IMAGE_TYPE_2D, _format,
+                   textureSize, textureSize,
+                   _imageUsageFlags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT| VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL,
+                   (uint32_t)floor(log2(textureSize)) + 1, 6, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
+
+            imageLayout = _imageLayout;
+
+            for (int l = 0; l < mapDic.size(); l++) {
+                Texture inTex;
+                inTex.loadStbLinearNoSampling(mapDic[l].c_str(), device);
+
+                VkCommandBuffer blitFirstMipCmd = device->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+                VkImageBlit firstMipBlit{};
+                firstMipBlit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, l, 1};
+                firstMipBlit.srcOffsets[1] = {inTex.infos.extent.width,inTex.infos.extent.height,1};
+                firstMipBlit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, l, 1};
+                firstMipBlit.dstOffsets[1] = {infos.extent.width,infos.extent.height,1};
+
+                VkImageSubresourceRange firstMipSubRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, l, 1};
+
+                setImageLayout(blitFirstMipCmd,
+                    VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    firstMipSubRange,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+                // Blit from source texture
+                vkCmdBlitImage(blitFirstMipCmd, inTex.image,
+                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &firstMipBlit, VK_FILTER_CUBIC_IMG);
+
+                setImageLayout(blitFirstMipCmd,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    firstMipSubRange,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+                device->flushCommandBuffer(blitFirstMipCmd, copyQueue, true);
+
+                inTex.destroy();
+
+                VkCommandBuffer blitCmd = device->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+                // mipmap generation
+                // Copy down mips from n-1 to n
+                for (int32_t i = 1; i < infos.mipLevels; i++)
+                {
+                    VkImageBlit imageBlit{};
+                    imageBlit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, i-1, l, 1};
+                    imageBlit.srcOffsets[1] = {infos.extent.width >> (i - 1),infos.extent.height >> (i - 1),1};
+                    imageBlit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, i, l, 1};
+                    imageBlit.dstOffsets[1] = {infos.extent.width >> i,infos.extent.height >> i, 1};
+
+                    VkImageSubresourceRange mipSubRange = {VK_IMAGE_ASPECT_COLOR_BIT, i, 1, l, 1};
+
+                    setImageLayout(blitCmd,
+                        VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        mipSubRange,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+                    // Blit from previous level
+                    vkCmdBlitImage(blitCmd,
+                        image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        1, &imageBlit, VK_FILTER_LINEAR);
+
+                    setImageLayout(blitCmd,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        mipSubRange,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+                }
+                firstMipSubRange.levelCount = infos.mipLevels;
+                setImageLayout(blitCmd,
+                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, imageLayout,
+                    firstMipSubRange,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+                device->flushCommandBuffer(blitCmd, copyQueue, true);
+            }
+
+            createView(VK_IMAGE_VIEW_TYPE_CUBE, VK_IMAGE_ASPECT_COLOR_BIT,infos.mipLevels,6);
+            createSampler(VK_FILTER_CUBIC_IMG,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,VK_SAMPLER_MIPMAP_MODE_LINEAR);
+            //samplerCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
+
+            updateDescriptor();
+
+        }
         void loadFromFile(
             std::string filename,
             VkFormat format,
             vks::VulkanDevice *_device,
             VkQueue copyQueue,
             VkImageUsageFlags imageUsageFlags = VK_IMAGE_USAGE_SAMPLED_BIT,
-            VkImageLayout imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+            VkImageLayout _imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
         {
 #if defined(__ANDROID__)
             // Textures are stored inside the apk on Android (compressed)
@@ -145,6 +206,8 @@ namespace vks
                    imageUsageFlags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                     VK_IMAGE_TILING_OPTIMAL,static_cast<uint32_t>(texCube.levels()), 6, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
 
+            imageLayout = _imageLayout;
+
             vks::Buffer stagingBuffer;
             device->createBuffer (VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -161,7 +224,7 @@ namespace vks
                 for (uint32_t level = 0; level < infos.mipLevels; level++) {
                     VkBufferImageCopy bufferCopyRegion = {};
                     bufferCopyRegion.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, level, face, 1};
-                    bufferCopyRegion.imageExtent = {texCube[face][level].extent().x,texCube[face][level].extent().y,1};
+                    bufferCopyRegion.imageExtent = {(uint32_t)texCube[face][level].extent().x,(uint32_t)texCube[face][level].extent().y,1};
                     bufferCopyRegion.bufferOffset = offset;
 
                     bufferCopyRegions.push_back(bufferCopyRegion);
@@ -183,7 +246,7 @@ namespace vks
                                    static_cast<uint32_t>(bufferCopyRegions.size()), bufferCopyRegions.data());
 
             setImageLayout(copyCmd,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, imageLayout,
                            subresourceRange,
                            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
@@ -192,7 +255,6 @@ namespace vks
 
             createView(VK_IMAGE_VIEW_TYPE_CUBE, VK_IMAGE_ASPECT_COLOR_BIT,infos.mipLevels,6);
             createSampler(VK_FILTER_LINEAR,VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,VK_SAMPLER_MIPMAP_MODE_LINEAR);
-            //samplerCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
 
             updateDescriptor();
         }

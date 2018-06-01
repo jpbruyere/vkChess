@@ -112,7 +112,7 @@ void vkPbrRenderer::loadAssets()
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
     const std::string assetpath = "";
 #else
-    const std::string assetpath = "./../data/";
+    const std::string assetpath = "data/";
     struct stat info;
     if (stat(assetpath.c_str(), &info) != 0) {
         std::string msg = "Could not locate asset path in \"" + assetpath + "\".\nMake sure binary is run from correct relative directory!";
@@ -123,6 +123,22 @@ void vkPbrRenderer::loadAssets()
         exit(-1);
     }
 #endif
+
+//    std::vector<std::string> cubeMaps = {
+////        "data/textures/st-peters/posx.jpg",
+////        "data/textures/st-peters/negx.jpg",
+////        "data/textures/st-peters/negy.jpg",
+////        "data/textures/st-peters/posy.jpg",
+////        "data/textures/st-peters/posz.jpg",
+////        "data/textures/st-peters/negz.jpg",
+//        "data/textures/grace/px.png",
+//        "data/textures/grace/nx.png",
+//        "data/textures/grace/ny.png",
+//        "data/textures/grace/py.png",
+//        "data/textures/grace/pz.png",
+//        "data/textures/grace/nz.png",
+//    };
+//    textures.environmentCube.buildFromImages (cubeMaps, 2048, VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
     textures.environmentCube.loadFromFile(assetpath + "textures/papermill_hdr16f_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
     models.skybox.loadFromFile(assetpath + "models/Box/glTF-Embedded/Box.gltf", vulkanDevice, queue);
 }
@@ -1184,7 +1200,7 @@ void vkPbrRenderer::updateUniformBuffers()
 
 void vkPbrRenderer::updateParams()
 {
-    lightingParams.lightDir = glm::vec4(0.0f, -0.5f, -0.5f, 1.0f);
+    lightingParams.lightDir = glm::vec4(-10.0f, 150.f, -10.f, 1.0f);
     sharedUBOs.params.copyTo(&lightingParams, sizeof(lightingParams));
 }
 

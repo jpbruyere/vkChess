@@ -17,7 +17,7 @@ const std::string getAssetPath()
 #elif defined(VK_EXAMPLE_DATA_DIR)
     return VK_EXAMPLE_DATA_DIR;
 #else
-    return "./../data/";
+    return "data/";
 #endif
 }
 #endif
@@ -46,7 +46,7 @@ VkPipelineShaderStageCreateInfo loadShader(VkDevice device, std::string filename
     VK_CHECK_RESULT(vkCreateShaderModule(device, &moduleCreateInfo, NULL, &shaderStage.module));
     delete[] shaderCode;
 #else
-    std::ifstream is("./../data/shaders/" + filename, std::ios::binary | std::ios::in | std::ios::ate);
+    std::ifstream is("shaders/" + filename, std::ios::binary | std::ios::in | std::ios::ate);
 
     if (is.is_open()) {
         size_t size = is.tellg();

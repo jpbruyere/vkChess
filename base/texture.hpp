@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VkEngine.h"
+#include "stb_image.h"
 
 namespace vks
 {
@@ -115,7 +116,7 @@ namespace vks
 
             createView(VK_IMAGE_VIEW_TYPE_2D_ARRAY, VK_IMAGE_ASPECT_COLOR_BIT, infos.mipLevels, infos.arrayLayers);
             createSampler(VK_FILTER_LINEAR,VK_SAMPLER_ADDRESS_MODE_REPEAT,VK_SAMPLER_MIPMAP_MODE_LINEAR,
-                          (float)infos.mipLevels,VK_TRUE,8.0f,VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE);
+                          VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE);
 
             updateDescriptor();
         }
@@ -301,12 +302,14 @@ namespace vks
             stagingBuffer.destroy();
         }
         void createView (VkImageViewType viewType, VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                         uint32_t levelCount = 1, uint32_t layerCount = 1) {
+                         uint32_t levelCount = 1, uint32_t layerCount = 1, VkComponentMapping components =
+                         {VK_COMPONENT_SWIZZLE_R,VK_COMPONENT_SWIZZLE_G,VK_COMPONENT_SWIZZLE_B,VK_COMPONENT_SWIZZLE_A }) {
+
             VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
             viewInfo.image      = image;
             viewInfo.viewType   = viewType;
             viewInfo.format     = infos.format;
-            viewInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
+            viewInfo.components = components;
             viewInfo.subresourceRange.aspectMask = aspectMask;
             viewInfo.subresourceRange.levelCount = levelCount;
             viewInfo.subresourceRange.layerCount = layerCount;
@@ -315,13 +318,10 @@ namespace vks
 
         void createSampler (VkFilter filter = VK_FILTER_NEAREST, VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT,
                             VkSamplerMipmapMode mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-                            float maxLod = 0.f,
-                            VkBool32 anisotropyEnable = VK_FALSE,
-                            float maxAnisotropy = 0.f,
                             VkBorderColor borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
                             VkCompareOp compareOp = VK_COMPARE_OP_NEVER) {
 
-            VkSamplerCreateInfo samplerInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+            VkSamplerCreateInfo samplerInfo = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
             samplerInfo.magFilter = filter;
             samplerInfo.minFilter = filter;
             samplerInfo.mipmapMode = mipmapMode;
@@ -330,9 +330,10 @@ namespace vks
             samplerInfo.addressModeW = addressMode;
             samplerInfo.compareOp = compareOp;
             samplerInfo.borderColor = borderColor;
-            samplerInfo.maxAnisotropy = maxAnisotropy;
-            samplerInfo.anisotropyEnable = anisotropyEnable;
-            samplerInfo.maxLod = maxLod;
+            samplerInfo.maxAnisotropy = device->enabledFeatures.samplerAnisotropy ? device->properties.limits.maxSamplerAnisotropy : 1.0f;
+            samplerInfo.anisotropyEnable = device->enabledFeatures.samplerAnisotropy;
+            samplerInfo.minLod = 0;
+            samplerInfo.maxLod = infos.mipLevels;
             VK_CHECK_RESULT(vkCreateSampler(device->logicalDevice, &samplerInfo, nullptr, &sampler));
         }
         void buildMipmaps (VkQueue copyQueue, VkCommandBuffer _blitCmd = VK_NULL_HANDLE) {
@@ -372,6 +373,42 @@ namespace vks
             if (_blitCmd)//if continuing an already existing cmd buff, cancel flush here
                 return;
             device->flushCommandBuffer(blitCmd, copyQueue, true);
+        }
+        void loadStbLinearNoSampling (
+            std::string filename,
+            vks::VulkanDevice *device,
+            VkImageUsageFlags imageUsageFlags = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            bool flipY = true)
+        {
+            device = device;
+
+            stbi_set_flip_vertically_on_load(flipY);
+
+            int w=0,h=0,channels=0;
+            unsigned char *img = stbi_load(filename.c_str(),&w,&h,&channels,4);
+
+            if (img == NULL){
+                std::cerr << "unable to load image " << std::string(stbi_failure_reason());
+                exit(-1);
+            }
+
+            create(device, VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, static_cast<uint32_t>(w), static_cast<uint32_t>(h),
+                   imageUsageFlags, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VK_IMAGE_TILING_LINEAR,
+                   1,1,0,VK_SAMPLE_COUNT_1_BIT,VK_IMAGE_LAYOUT_PREINITIALIZED);
+            uint32_t imgSize = infos.extent.width * infos.extent.height * 4;
+
+            VkImageSubresource subRes = {};
+            subRes.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            VkSubresourceLayout subResLayout;
+
+            void *data;
+            vkGetImageSubresourceLayout(device->logicalDevice, image, &subRes, &subResLayout);
+            VK_CHECK_RESULT(vkMapMemory(device->logicalDevice, deviceMemory, 0, imgSize, 0, &data));
+            memcpy(data, img, imgSize);	// Copy image data into memory
+            vkUnmapMemory(device->logicalDevice, deviceMemory);
+
+            stbi_image_free(img);
+            stbi_set_flip_vertically_on_load(false);
         }
     };
 }

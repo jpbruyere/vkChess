@@ -834,7 +834,7 @@ public:
         mod = &models2[0];
 
         //mod->loadFromFile("/home/jp/gltf/chess/blend.gltf", vulkanDevice, queue, true);
-        mod->loadFromFile("../data/models/chess.gltf", vulkanDevice, queue, true);
+        mod->loadFromFile("data/models/chess.gltf", vulkanDevice, queue, true);
 
         mod->addInstance("frame", glm::translate(glm::mat4(1.0),       glm::vec3( 0,0,0)));
 
@@ -1060,6 +1060,9 @@ public:
             break;
         case 43://h
             toogleHint();
+            break;
+        default:
+            vkPbrRenderer::keyPressed(key);
             break;
         }
     }
