@@ -94,28 +94,28 @@ void vkRenderer::prepareRenderPass()
             VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_DONT_CARE,
             VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        },{0,//ms resolve
-           swapChain->colorFormat, VK_SAMPLE_COUNT_1_BIT,
-           VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
-           VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-           VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
         },{0,//ms depth
            depthFormat, sampleCount,
            VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
            VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        },{0,//ms resolve
+           swapChain->colorFormat, VK_SAMPLE_COUNT_1_BIT,
+           VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
+           VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+           VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
         }
     };
 
     VkAttachmentReference colorReference    = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    VkAttachmentReference resolveReference  = {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    VkAttachmentReference depthReference    = {2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference depthReference    = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference resolveReference  = {2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
     VkSubpassDescription subpass = {};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorReference;
-    subpass.pResolveAttachments = &resolveReference;
+    subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount    = 1;
+    subpass.pColorAttachments       = &colorReference;
+    subpass.pResolveAttachments     = &resolveReference;
     subpass.pDepthStencilAttachment = &depthReference;
 
 
@@ -150,35 +150,23 @@ void vkRenderer::prepareRenderPass()
     prepareFrameBuffer();
 }
 void vkRenderer::prepareFrameBuffer () {
-    VkImageView attachments[3];
-
-//    if (settings.multiSampling) {
-        attachments[0] = swapChain->multisampleTarget->color.view;
-        attachments[2] = swapChain->multisampleTarget->depth.view;
-        //attachments[3] = swapChain->depthStencil->view;
-//    }
-//    else {
-//        attachments[1] = depthStencil.view;
-//    }
+    VkImageView attachments[] = {
+        swapChain->multisampleTarget->color.view,
+        swapChain->multisampleTarget->depth.view,
+        VK_NULL_HANDLE
+    };
 
     VkFramebufferCreateInfo frameBufferCI = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
     frameBufferCI.renderPass        = renderPass;
-    //frameBufferCI.attachmentCount = settings.multiSampling ? 4 :2;
     frameBufferCI.attachmentCount   = 3;
     frameBufferCI.pAttachments      = attachments;
     frameBufferCI.width             = swapChain->extent.width;
     frameBufferCI.height            = swapChain->extent.height;
     frameBufferCI.layers            = 1;
 
-    // Create frame buffers for every swap chain image
     frameBuffers.resize(swapChain->imageCount);
     for (uint32_t i = 0; i < frameBuffers.size(); i++) {
-//        if (settings.multiSampling) {
-            attachments[1] = swapChain->buffers[i].view;
-//        }
-//        else {
-//            attachments[0] = swapChain.buffers[i].view;
-//        }
+        attachments[2] = swapChain->buffers[i].view;
         VK_CHECK_RESULT(vkCreateFramebuffer(device->logicalDevice, &frameBufferCI, nullptr, &frameBuffers[i]));
     }
 }
