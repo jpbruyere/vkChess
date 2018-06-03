@@ -25,7 +25,7 @@ btVKDebugDrawer::~btVKDebugDrawer()
 void btVKDebugDrawer::destroy() {
     vkRenderer::destroy();
 
-    vkDestroyPipeline       (device->logicalDevice, pipelineSDFF, VK_NULL_HANDLE);
+    vkDestroyPipeline       (device->dev, pipelineSDFF, VK_NULL_HANDLE);
 }
 
 void btVKDebugDrawer::configurePipelineLayout() {
@@ -101,7 +101,7 @@ void btVKDebugDrawer::preparePipeline () {
     VkPipelineLayoutCreateInfo pipelineLayoutCI = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pipelineLayoutCI.setLayoutCount = shadingCtx->layouts.size();
     pipelineLayoutCI.pSetLayouts    = shadingCtx->layouts.data();
-    VK_CHECK_RESULT(vkCreatePipelineLayout(device->logicalDevice, &pipelineLayoutCI, nullptr, &pipelineLayout));
+    VK_CHECK_RESULT(vkCreatePipelineLayout(device->dev, &pipelineLayoutCI, nullptr, &pipelineLayout));
 
     // Vertex bindings an attributes
     VkVertexInputBindingDescription vertexInputBinding =
@@ -136,13 +136,13 @@ void btVKDebugDrawer::preparePipeline () {
     pipelineCI.pStages = shaderStages.data();
 
     shaderStages = {
-        loadShader(device->logicalDevice, "debugDraw.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
-        loadShader(device->logicalDevice, "debugDraw.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
+        loadShader(device->dev, "debugDraw.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
+        loadShader(device->dev, "debugDraw.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
     };
-    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->logicalDevice, VK_NULL_HANDLE, 1, &pipelineCI, nullptr, &pipeline));
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->dev, device->pipelineCache, 1, &pipelineCI, nullptr, &pipeline));
 
     for (auto shaderStage : shaderStages)
-        vkDestroyShaderModule(device->logicalDevice, shaderStage.module, nullptr);
+        vkDestroyShaderModule(device->dev, shaderStage.module, nullptr);
 
     //SDFF pipeline
 
@@ -154,13 +154,13 @@ void btVKDebugDrawer::preparePipeline () {
         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3},	// color
     };
 
-    shaderStages[0] = loadShader(device->logicalDevice, "sdf.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
-    shaderStages[1] = loadShader(device->logicalDevice, "sdf.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+    shaderStages[0] = loadShader(device->dev, "sdf.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+    shaderStages[1] = loadShader(device->dev, "sdf.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->logicalDevice, VK_NULL_HANDLE, 1, &pipelineCI, nullptr, &pipelineSDFF));
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->dev, device->pipelineCache, 1, &pipelineCI, nullptr, &pipelineSDFF));
 
     for (auto shaderStage : shaderStages)
-        vkDestroyShaderModule(device->logicalDevice, shaderStage.module, nullptr);
+        vkDestroyShaderModule(device->dev, shaderStage.module, nullptr);
 }
 
 void btVKDebugDrawer::buildCommandBuffer (){

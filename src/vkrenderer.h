@@ -30,7 +30,6 @@ protected:
 
     VkPipeline              pipeline;
     VkPipelineLayout        pipelineLayout;
-    VkPipelineCache         pipelineCache;
 
     VkFormat                depthFormat;
 

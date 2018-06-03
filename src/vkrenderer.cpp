@@ -28,9 +28,9 @@ void vkRenderer::destroy() {
     freeRessources();
 
     for (uint32_t i = 0; i < frameBuffers.size(); i++)
-        vkDestroyFramebuffer(device->logicalDevice, frameBuffers[i], nullptr);
+        vkDestroyFramebuffer(device->dev, frameBuffers[i], nullptr);
 
-    vkFreeCommandBuffers(device->logicalDevice, commandPool, cmdBuffers.size(), cmdBuffers.data());
+    vkFreeCommandBuffers(device->dev, commandPool, cmdBuffers.size(), cmdBuffers.data());
 
     for (uint32_t i = 0; i < fences.size(); i++)
         device->destroyFence(fences[i]);
@@ -39,10 +39,10 @@ void vkRenderer::destroy() {
 
     delete shadingCtx;
 
-    vkDestroyRenderPass     (device->logicalDevice, renderPass, VK_NULL_HANDLE);
-    vkDestroyPipeline       (device->logicalDevice, pipeline, VK_NULL_HANDLE);
-    vkDestroyPipelineLayout (device->logicalDevice, pipelineLayout, VK_NULL_HANDLE);
-    vkDestroyCommandPool    (device->logicalDevice, commandPool, VK_NULL_HANDLE);
+    vkDestroyRenderPass     (device->dev, renderPass, VK_NULL_HANDLE);
+    vkDestroyPipeline       (device->dev, pipeline, VK_NULL_HANDLE);
+    vkDestroyPipelineLayout (device->dev, pipelineLayout, VK_NULL_HANDLE);
+    vkDestroyCommandPool    (device->dev, commandPool, VK_NULL_HANDLE);
 }
 void vkRenderer::prepare() {
     fences.resize(swapChain->imageCount);
@@ -62,7 +62,7 @@ void vkRenderer::prepare() {
     VkCommandPoolCreateInfo cmdPoolInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     cmdPoolInfo.queueFamilyIndex = device->queueFamilyIndices.graphics;
     cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    VK_CHECK_RESULT(vkCreateCommandPool(device->logicalDevice, &cmdPoolInfo, nullptr, &commandPool));
+    VK_CHECK_RESULT(vkCreateCommandPool(device->dev, &cmdPoolInfo, nullptr, &commandPool));
 
     cmdBuffers.resize(frameBuffers.size());
 
@@ -70,10 +70,9 @@ void vkRenderer::prepare() {
     cmdBufAllocateInfo.commandPool          = commandPool;
     cmdBufAllocateInfo.level                = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     cmdBufAllocateInfo.commandBufferCount   = frameBuffers.size();
-    VK_CHECK_RESULT(vkAllocateCommandBuffers(device->logicalDevice, &cmdBufAllocateInfo, cmdBuffers.data()));
+    VK_CHECK_RESULT(vkAllocateCommandBuffers(device->dev, &cmdBufAllocateInfo, cmdBuffers.data()));
 
-    auto test = this;
-    test->configurePipelineLayout();
+    configurePipelineLayout();
     loadRessources();
     prepareDescriptors();
     preparePipeline ();
@@ -139,7 +138,7 @@ void vkRenderer::prepareRenderPass()
     renderPassCI.pSubpasses         = &subpass;
     renderPassCI.dependencyCount    = 2;
     renderPassCI.pDependencies      = dependencies;
-    VK_CHECK_RESULT(vkCreateRenderPass(device->logicalDevice, &renderPassCI, nullptr, &renderPass));
+    VK_CHECK_RESULT(vkCreateRenderPass(device->dev, &renderPassCI, nullptr, &renderPass));
 
     prepareFrameBuffer();
 }
@@ -162,7 +161,7 @@ void vkRenderer::prepareFrameBuffer () {
 
     for (uint32_t i = 0; i < frameBuffers.size(); i++) {
         attachments[2] = swapChain->buffers[i].view;
-        VK_CHECK_RESULT(vkCreateFramebuffer(device->logicalDevice, &frameBufferCI, nullptr, &frameBuffers[i]));
+        VK_CHECK_RESULT(vkCreateFramebuffer(device->dev, &frameBufferCI, nullptr, &frameBuffers[i]));
     }
 }
 
@@ -174,6 +173,7 @@ void vkRenderer::configurePipelineLayout () {
     shadingCtx->prepare();
 
 }
+//place here specific renderer resources
 void vkRenderer::loadRessources() {
     vertexBuff.create (device,
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -182,6 +182,7 @@ void vkRenderer::loadRessources() {
 
     vertexBuff.map();
 }
+//and free here
 void vkRenderer::freeRessources() {
     vertexBuff.unmap();
     vertexBuff.destroy();
@@ -244,7 +245,7 @@ void vkRenderer::preparePipeline()
     VkPipelineLayoutCreateInfo pipelineLayoutCI = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pipelineLayoutCI.setLayoutCount = shadingCtx->layouts.size();
     pipelineLayoutCI.pSetLayouts    = shadingCtx->layouts.data();
-    VK_CHECK_RESULT(vkCreatePipelineLayout(device->logicalDevice, &pipelineLayoutCI, nullptr, &pipelineLayout));
+    VK_CHECK_RESULT(vkCreatePipelineLayout(device->dev, &pipelineLayoutCI, nullptr, &pipelineLayout));
 
     // Vertex bindings an attributes
     VkVertexInputBindingDescription vertexInputBinding =
@@ -279,13 +280,13 @@ void vkRenderer::preparePipeline()
     pipelineCI.pStages = shaderStages.data();
 
     shaderStages = {
-        loadShader(device->logicalDevice, "debugDraw.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
-        loadShader(device->logicalDevice, "debugDraw.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
+        loadShader(device->dev, "debugDraw.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
+        loadShader(device->dev, "debugDraw.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
     };
-    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->logicalDevice, VK_NULL_HANDLE, 1, &pipelineCI, nullptr, &pipeline));
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->dev, device->pipelineCache, 1, &pipelineCI, nullptr, &pipeline));
 
     for (auto shaderStage : shaderStages)
-        vkDestroyShaderModule(device->logicalDevice, shaderStage.module, nullptr);
+        vkDestroyShaderModule(device->dev, shaderStage.module, nullptr);
 }
 void vkRenderer::draw(VkCommandBuffer cmdBuff) {
     VkDeviceSize offsets[1] = { 0 };
@@ -347,8 +348,8 @@ void vkRenderer::submit (VkQueue queue, VkSemaphore* waitSemaphore, uint32_t wai
     submitInfo.waitSemaphoreCount	= waitSemaphoreCount;
     submitInfo.pWaitSemaphores		= waitSemaphore;
 
-    VK_CHECK_RESULT(vkWaitForFences(device->logicalDevice, 1, &fences[swapChain->currentBuffer], VK_TRUE, DRAW_FENCE_TIMEOUT));
-    VK_CHECK_RESULT(vkResetFences(device->logicalDevice, 1, &fences[swapChain->currentBuffer]));
+    VK_CHECK_RESULT(vkWaitForFences(device->dev, 1, &fences[swapChain->currentBuffer], VK_TRUE, DRAW_FENCE_TIMEOUT));
+    VK_CHECK_RESULT(vkResetFences(device->dev, 1, &fences[swapChain->currentBuffer]));
 
     VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fences[swapChain->currentBuffer]));
 }
@@ -358,7 +359,7 @@ void vkRenderer::clear(){
 }
 
 void vkRenderer::flush(){
-    VK_CHECK_RESULT(vkWaitForFences(device->logicalDevice, 1, &fences[swapChain->currentBuffer], VK_TRUE, DRAW_FENCE_TIMEOUT));
+    VK_CHECK_RESULT(vkWaitForFences(device->dev, 1, &fences[swapChain->currentBuffer], VK_TRUE, DRAW_FENCE_TIMEOUT));
     memcpy(vertexBuff.mapped, vertices.data(), vertices.size() * sizeof(float));
     vertexCount = vertices.size() / 6;
     buildCommandBuffer();

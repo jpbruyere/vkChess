@@ -24,14 +24,17 @@ namespace vks
 {
     struct VulkanDevice
     {
-        VkPhysicalDevice            physicalDevice;
-        VkDevice                    logicalDevice;
+        VkPhysicalDevice            phy;
+        VkDevice                    dev;
         VkPhysicalDeviceProperties  properties;
         VkPhysicalDeviceFeatures    features;
         VkPhysicalDeviceFeatures    enabledFeatures;
         VkPhysicalDeviceMemoryProperties    memoryProperties;
         std::vector<VkQueueFamilyProperties>queueFamilyProperties;
-        VkCommandPool commandPool = VK_NULL_HANDLE;
+
+        VkCommandPool   commandPool     = VK_NULL_HANDLE;
+        VkPipelineCache pipelineCache   = VK_NULL_HANDLE;
+        bool            savePLCache     = true;
 
         VkQueue queue;
 
@@ -40,7 +43,7 @@ namespace vks
             uint32_t compute;
         } queueFamilyIndices;
 
-        operator VkDevice() { return logicalDevice; }
+        operator VkDevice() { return dev; }
 
         /**
         * Default constructor
@@ -50,7 +53,7 @@ namespace vks
         VulkanDevice(VkPhysicalDevice physicalDevice)
         {
             assert(physicalDevice);
-            this->physicalDevice = physicalDevice;
+            this->phy = physicalDevice;
 
             // Store Properties features, limits and properties of the physical device for later use
             // Device properties also contain limits and sparse properties
@@ -74,25 +77,26 @@ namespace vks
         */
         ~VulkanDevice()
         {
-            if (commandPool) {
-                vkDestroyCommandPool(logicalDevice, commandPool, nullptr);
+            if (pipelineCache){
+                if (savePLCache){
+                    std::ofstream os("pipeline.cache", std::ofstream::binary);
+                    size_t plCacheSize = 0;
+                    char* plCache = nullptr;
+                    VK_CHECK_RESULT(vkGetPipelineCacheData(dev, pipelineCache, &plCacheSize, nullptr));
+                    plCache = new char [plCacheSize];
+                    VK_CHECK_RESULT(vkGetPipelineCacheData(dev, pipelineCache, &plCacheSize, plCache));
+                    os.write (plCache, plCacheSize);
+                    os.close();
+                    delete[] plCache;
+                }
+                vkDestroyPipelineCache(dev, pipelineCache, NULL);
             }
-            if (logicalDevice) {
-                vkDestroyDevice(logicalDevice, nullptr);
-            }
+            if (commandPool)
+                vkDestroyCommandPool(dev, commandPool, nullptr);
+            if (dev)
+                vkDestroyDevice(dev, nullptr);
         }
 
-        /**
-        * Get the index of a memory type that has all the requested property bits set
-        *
-        * @param typeBits Bitmask with bits set for each memory type supported by the resource to request for (from VkMemoryRequirements)
-        * @param properties Bitmask of properties for the memory type to request
-        * @param (Optional) memTypeFound Pointer to a bool that is set to true if a matching memory type has been found
-        *
-        * @return Index of the requested memory type
-        *
-        * @throw Throws an exception if memTypeFound is null and no memory type could be found that supports the requested properties
-        */
         uint32_t getMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties, VkBool32 *memTypeFound = nullptr)
         {
             for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
@@ -115,15 +119,7 @@ namespace vks
             }
         }
 
-        /**
-        * Get the index of a queue family that supports the requested queue flags
-        *
-        * @param queueFlags Queue flags to find a queue family index for
-        *
-        * @return Index of the queue family index that matches the flags
-        *
-        * @throw Throws an exception if no queue family index could be found that supports the requested flags
-        */
+
         uint32_t getQueueFamilyIndex(VkQueueFlagBits queueFlags)
         {
             // Dedicated queue for compute
@@ -149,24 +145,9 @@ namespace vks
             throw std::runtime_error("Could not find a matching queue family index");
         }
 
-        /**
-        * Create the logical device based on the assigned physical device, also gets default queue family indices
-        *
-        * @param enabledFeatures Can be used to enable certain features upon device creation
-        * @param requestedQueueTypes Bit flags specifying the queue types to be requested from the device
-        *
-        * @return VkResult of the device creation call
-        */
         VkResult createLogicalDevice(VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> enabledExtensions, VkQueueFlags requestedQueueTypes = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)
         {
-            // Desired queues need to be requested upon logical device creation
-            // Due to differing queue family configurations of Vulkan implementations this can be a bit tricky, especially if the application
-            // requests different queue types
-
             std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
-
-            // Get queue family indices for the requested queue family types
-            // Note that the indices may overlap depending on the implementation
 
             const float defaultQueuePriority(0.0f);
 
@@ -215,28 +196,37 @@ namespace vks
                 deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
             }
 
-            VkResult result = vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &logicalDevice);
+            VkResult result = vkCreateDevice(phy, &deviceCreateInfo, nullptr, &dev);
 
             if (result == VK_SUCCESS)
                 commandPool = createCommandPool(queueFamilyIndices.graphics);
 
+            std::ifstream is ("pipeline.cache", std::ifstream::binary);
+            char* buffer = nullptr;
+            int length = 0;
+            VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+            if (is) {
+                is.seekg (0, is.end);
+                length = is.tellg();
+                is.seekg (0, is.beg);
+                buffer = new char [length];
+                is.read (buffer,length);
+                is.close();
+                pipelineCacheCreateInfo.initialDataSize = length;
+                pipelineCacheCreateInfo.pInitialData = buffer;
+            }
+
+            VK_CHECK_RESULT(vkCreatePipelineCache (dev, &pipelineCacheCreateInfo, nullptr, &pipelineCache));
+            if (buffer)
+                delete[] buffer;
+
             this->enabledFeatures = enabledFeatures;
 
-            vkGetDeviceQueue(logicalDevice, queueFamilyIndices.graphics, 0, &queue);
+            vkGetDeviceQueue(dev, queueFamilyIndices.graphics, 0, &queue);
 
             return result;
         }
 
-        /**
-        * Create a command pool for allocation command buffers from
-        *
-        * @param queueFamilyIndex Family index of the queue to create the command pool for
-        * @param createFlags (Optional) Command pool creation flags (Defaults to VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
-        *
-        * @note Command buffers allocated from the created pool can only be submitted to a queue with the same family index
-        *
-        * @return A handle to the created command buffer
-        */
         VkCommandPool createCommandPool(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags createFlags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
         {
             VkCommandPoolCreateInfo cmdPoolInfo = {};
@@ -244,18 +234,10 @@ namespace vks
             cmdPoolInfo.queueFamilyIndex = queueFamilyIndex;
             cmdPoolInfo.flags = createFlags;
             VkCommandPool cmdPool;
-            VK_CHECK_RESULT(vkCreateCommandPool(logicalDevice, &cmdPoolInfo, nullptr, &cmdPool));
+            VK_CHECK_RESULT(vkCreateCommandPool(dev, &cmdPoolInfo, nullptr, &cmdPool));
             return cmdPool;
         }
 
-        /**
-        * Allocate a command buffer from the command pool
-        *
-        * @param level Level of the new command buffer (primary or secondary)
-        * @param (Optional) begin If true, recording on the new command buffer will be started (vkBeginCommandBuffer) (Defaults to false)
-        *
-        * @return A handle to the allocated command buffer
-        */
         VkCommandBuffer createCommandBuffer(VkCommandBufferLevel level, bool begin = false)
         {
             VkCommandBufferAllocateInfo cmdBufAllocateInfo{};
@@ -265,7 +247,7 @@ namespace vks
             cmdBufAllocateInfo.commandBufferCount = 1;
 
             VkCommandBuffer cmdBuffer;
-            VK_CHECK_RESULT(vkAllocateCommandBuffers(logicalDevice, &cmdBufAllocateInfo, &cmdBuffer));
+            VK_CHECK_RESULT(vkAllocateCommandBuffers(dev, &cmdBufAllocateInfo, &cmdBuffer));
 
             // If requested, also start recording for the new command buffer
             if (begin) {
@@ -300,38 +282,38 @@ namespace vks
             VkFenceCreateInfo fenceInfo{};
             fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
             VkFence fence;
-            VK_CHECK_RESULT(vkCreateFence(logicalDevice, &fenceInfo, nullptr, &fence));
+            VK_CHECK_RESULT(vkCreateFence(dev, &fenceInfo, nullptr, &fence));
 
             // Submit to the queue
             VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fence));
             // Wait for the fence to signal that command buffer has finished executing
-            VK_CHECK_RESULT(vkWaitForFences(logicalDevice, 1, &fence, VK_TRUE, 100000000000));
+            VK_CHECK_RESULT(vkWaitForFences(dev, 1, &fence, VK_TRUE, 100000000000));
 
-            vkDestroyFence(logicalDevice, fence, nullptr);
+            vkDestroyFence(dev, fence, nullptr);
 
             if (free) {
-                vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
+                vkFreeCommandBuffers(dev, commandPool, 1, &commandBuffer);
             }
         }
         VkSemaphore createSemaphore ()
         {
             VkSemaphore sema = VK_NULL_HANDLE;
             VkSemaphoreCreateInfo semaphoreCreateInfo {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-            VK_CHECK_RESULT(vkCreateSemaphore (logicalDevice, &semaphoreCreateInfo, nullptr, &sema));
+            VK_CHECK_RESULT(vkCreateSemaphore (dev, &semaphoreCreateInfo, nullptr, &sema));
             return sema;
         }
         VkFence createFence (bool signaled = false) {
             VkFence fence = VK_NULL_HANDLE;
             VkFenceCreateInfo fenceCreateInfo {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, VK_NULL_HANDLE,
                         signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0};
-            VK_CHECK_RESULT(vkCreateFence (logicalDevice, &fenceCreateInfo, nullptr, &fence));
+            VK_CHECK_RESULT(vkCreateFence (dev, &fenceCreateInfo, nullptr, &fence));
             return fence;
         }
         inline void destroyFence (VkFence fence) {
-            vkDestroyFence (logicalDevice, fence, VK_NULL_HANDLE);
+            vkDestroyFence (dev, fence, VK_NULL_HANDLE);
         }
         inline void destroySemaphore (VkSemaphore semaphore) {
-            vkDestroySemaphore (logicalDevice, semaphore, VK_NULL_HANDLE);
+            vkDestroySemaphore (dev, semaphore, VK_NULL_HANDLE);
         }
     };
 }

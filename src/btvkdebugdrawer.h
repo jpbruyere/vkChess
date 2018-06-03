@@ -10,8 +10,6 @@ class btVKDebugDrawer : public btIDebugDraw, public vkRenderer
     int m_debugMode;
 
     VkPipeline              pipelineSDFF;
-    VkPipelineLayout        pipelineLayout;
-    VkPipelineCache         pipelineCache;
 
 protected:
     std::vector<float>  sdffVertices;

@@ -307,9 +307,6 @@ void VulkanExampleBase::prepare()
 
     presentCompleteSemaphore = vulkanDevice->createSemaphore();
 
-    VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
-    VK_CHECK_RESULT(vkCreatePipelineCache(device, &pipelineCacheCreateInfo, nullptr, &pipelineCache));
-
     createRenderTarget();
 
     //setupFrameBuffer();
@@ -636,7 +633,6 @@ VulkanExampleBase::~VulkanExampleBase()
 
     vkDestroyRenderPass     (device, renderPass, nullptr);
     vkDestroyFramebuffer    (device, frameBuffer, nullptr);
-    vkDestroyPipelineCache  (device, pipelineCache, nullptr);
 
     vulkanDevice->destroySemaphore(presentCompleteSemaphore);
 
@@ -733,16 +729,16 @@ void VulkanExampleBase::initVulkan()
     }
 #endif
 
-    physicalDevice = physicalDevices[selectedDevice];
+    phy = physicalDevices[selectedDevice];
 
-    vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
-    vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemoryProperties);
+    vkGetPhysicalDeviceProperties(phy, &deviceProperties);
+    vkGetPhysicalDeviceFeatures(phy, &deviceFeatures);
+    vkGetPhysicalDeviceMemoryProperties(phy, &deviceMemoryProperties);
 
     /*
         Device creation
     */
-    vulkanDevice = new vks::VulkanDevice(physicalDevice);
+    vulkanDevice = new vks::VulkanDevice(phy);
     VkPhysicalDeviceFeatures enabledFeatures{};
     if (deviceFeatures.samplerAnisotropy) {
         enabledFeatures.samplerAnisotropy = VK_TRUE;
@@ -753,7 +749,7 @@ void VulkanExampleBase::initVulkan()
         std::cerr << "Could not create Vulkan device!" << std::endl;
         exit(res);
     }
-    device = vulkanDevice->logicalDevice;
+    device = vulkanDevice->dev;
 
     /*
         Suitable depth format
@@ -762,7 +758,7 @@ void VulkanExampleBase::initVulkan()
     VkBool32 validDepthFormat = false;
     for (auto& format : depthFormats) {
         VkFormatProperties formatProps;
-        vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &formatProps);
+        vkGetPhysicalDeviceFormatProperties(phy, format, &formatProps);
         if (formatProps.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
             depthFormat = format;
             validDepthFormat = true;
@@ -771,7 +767,7 @@ void VulkanExampleBase::initVulkan()
     }
     assert(validDepthFormat);
 
-    swapChain.connect(instance, physicalDevice, device);
+    swapChain.connect(instance, phy, device);
 
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
     // Get Android device name and manufacturer (to display along GPU name)

@@ -310,7 +310,7 @@ namespace vkglTF
 
 
                 VkFormatProperties formatProperties;
-                vkGetPhysicalDeviceFormatProperties(device->physicalDevice, VK_FORMAT_R8G8B8A8_UNORM, &formatProperties);
+                vkGetPhysicalDeviceFormatProperties(device->phy, VK_FORMAT_R8G8B8A8_UNORM, &formatProperties);
                 assert(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT);
                 assert(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT);
 
@@ -592,7 +592,7 @@ namespace vkglTF
         }
         void buildInstanceBuffer (){
             if (instancesBuff.size > 0){
-                vkDeviceWaitIdle(device->logicalDevice);
+                vkDeviceWaitIdle(device->dev);
                 instancesBuff.destroy();
             }
 

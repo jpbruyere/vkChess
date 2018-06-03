@@ -18,18 +18,12 @@ pbrRenderer2::~pbrRenderer2() {
 void pbrRenderer2::destroy() {
     prepared = false;
 
-    vkDestroyPipeline(device->logicalDevice, pipelines.skybox, nullptr);
-    vkDestroyPipeline(device->logicalDevice, pipelines.pbr, nullptr);
-    vkDestroyPipeline(device->logicalDevice, pipelines.pbrAlphaBlend, nullptr);
+    vkDestroyPipeline(device->dev, pipelines.skybox, nullptr);
+    vkDestroyPipeline(device->dev, pipelines.pbr, nullptr);
+    vkDestroyPipeline(device->dev, pipelines.pbrAlphaBlend, nullptr);
 
     for (uint i=0; i<models.size(); i++)
         models[i].destroy();
-    skybox.destroy();
-
-    textures.environmentCube.destroy();
-    textures.irradianceCube.destroy();
-    textures.prefilteredCube.destroy();
-    textures.lutBrdf.destroy();
 
     vkRenderer::destroy();
 }
@@ -68,6 +62,14 @@ void pbrRenderer2::loadRessources() {
 
     generateBRDFLUT();
     generateCubemaps();
+}
+void pbrRenderer2::freeRessources() {
+    skybox.destroy();
+
+    textures.environmentCube.destroy();
+    textures.irradianceCube.destroy();
+    textures.prefilteredCube.destroy();
+    textures.lutBrdf.destroy();
 }
 void pbrRenderer2::prepareDescriptors()
 {
@@ -129,7 +131,7 @@ void pbrRenderer2::preparePipeline() {
     VkPipelineLayoutCreateInfo pipelineLayoutCI = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pipelineLayoutCI.setLayoutCount = shadingCtx->layouts.size();
     pipelineLayoutCI.pSetLayouts    = shadingCtx->layouts.data();
-    VK_CHECK_RESULT(vkCreatePipelineLayout(device->logicalDevice, &pipelineLayoutCI, nullptr, &pipelineLayout));
+    VK_CHECK_RESULT(vkCreatePipelineLayout(device->dev, &pipelineLayoutCI, nullptr, &pipelineLayout));
 
     // Vertex bindings an attributes
     std::vector<VkVertexInputBindingDescription> vertexInputBinding = {
@@ -177,13 +179,13 @@ void pbrRenderer2::preparePipeline() {
     vertexInputStateCI.vertexAttributeDescriptionCount = 3;
 
     shaderStages = {
-        loadShader(device->logicalDevice, "skybox.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
-        loadShader(device->logicalDevice, "skybox.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
+        loadShader(device->dev, "skybox.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
+        loadShader(device->dev, "skybox.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
     };
-    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->logicalDevice, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.skybox));
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->dev, device->pipelineCache, 1, &pipelineCI, nullptr, &pipelines.skybox));
 
     for (auto shaderStage : shaderStages)
-        vkDestroyShaderModule(device->logicalDevice, shaderStage.module, nullptr);
+        vkDestroyShaderModule(device->dev, shaderStage.module, nullptr);
 
     // PBR pipeline
     rasterizationStateCI.cullMode = VK_CULL_MODE_BACK_BIT;
@@ -193,10 +195,10 @@ void pbrRenderer2::preparePipeline() {
     depthStencilStateCI.depthTestEnable = VK_TRUE;
 
     shaderStages = {
-        loadShader(device->logicalDevice, "pbr.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
-        loadShader(device->logicalDevice, "pbr.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
+        loadShader(device->dev, "pbr.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
+        loadShader(device->dev, "pbr.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
     };
-    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->logicalDevice, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.pbr));
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->dev, device->pipelineCache, 1, &pipelineCI, nullptr, &pipelines.pbr));
 
     depthStencilStateCI.depthWriteEnable = VK_FALSE;
     depthStencilStateCI.depthTestEnable = VK_FALSE;
@@ -210,10 +212,10 @@ void pbrRenderer2::preparePipeline() {
     blendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     blendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
     blendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
-    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->logicalDevice, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.pbrAlphaBlend));
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->dev, device->pipelineCache, 1, &pipelineCI, nullptr, &pipelines.pbrAlphaBlend));
 
     for (auto shaderStage : shaderStages)
-        vkDestroyShaderModule(device->logicalDevice, shaderStage.module, nullptr);
+        vkDestroyShaderModule(device->dev, shaderStage.module, nullptr);
 }
 
 void pbrRenderer2::draw(VkCommandBuffer cmdBuff) {
@@ -249,15 +251,15 @@ void pbrRenderer2::generateBRDFLUT()
     imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageCI.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    VK_CHECK_RESULT(vkCreateImage(device->logicalDevice, &imageCI, nullptr, &textures.lutBrdf.image));
+    VK_CHECK_RESULT(vkCreateImage(device->dev, &imageCI, nullptr, &textures.lutBrdf.image));
     VkMemoryRequirements memReqs;
-    vkGetImageMemoryRequirements(device->logicalDevice, textures.lutBrdf.image, &memReqs);
+    vkGetImageMemoryRequirements(device->dev, textures.lutBrdf.image, &memReqs);
     VkMemoryAllocateInfo memAllocInfo{};
     memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     memAllocInfo.allocationSize = memReqs.size;
     memAllocInfo.memoryTypeIndex = device->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    VK_CHECK_RESULT(vkAllocateMemory(device->logicalDevice, &memAllocInfo, nullptr, &textures.lutBrdf.deviceMemory));
-    VK_CHECK_RESULT(vkBindImageMemory(device->logicalDevice, textures.lutBrdf.image, textures.lutBrdf.deviceMemory, 0));
+    VK_CHECK_RESULT(vkAllocateMemory(device->dev, &memAllocInfo, nullptr, &textures.lutBrdf.deviceMemory));
+    VK_CHECK_RESULT(vkBindImageMemory(device->dev, textures.lutBrdf.image, textures.lutBrdf.deviceMemory, 0));
 
     // View
     VkImageViewCreateInfo viewCI{};
@@ -269,7 +271,7 @@ void pbrRenderer2::generateBRDFLUT()
     viewCI.subresourceRange.levelCount = 1;
     viewCI.subresourceRange.layerCount = 1;
     viewCI.image = textures.lutBrdf.image;
-    VK_CHECK_RESULT(vkCreateImageView(device->logicalDevice, &viewCI, nullptr, &textures.lutBrdf.view));
+    VK_CHECK_RESULT(vkCreateImageView(device->dev, &viewCI, nullptr, &textures.lutBrdf.view));
 
     // Sampler
     VkSamplerCreateInfo samplerCI{};
@@ -284,7 +286,7 @@ void pbrRenderer2::generateBRDFLUT()
     samplerCI.maxLod = 1.0f;
     samplerCI.maxAnisotropy = 1.0f;
     samplerCI.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-    VK_CHECK_RESULT(vkCreateSampler(device->logicalDevice, &samplerCI, nullptr, &textures.lutBrdf.sampler));
+    VK_CHECK_RESULT(vkCreateSampler(device->dev, &samplerCI, nullptr, &textures.lutBrdf.sampler));
 
     // FB, Att, RP, Pipe, etc.
     VkAttachmentDescription attDesc{};
@@ -332,7 +334,7 @@ void pbrRenderer2::generateBRDFLUT()
     renderPassCI.pDependencies = dependencies.data();
 
     VkRenderPass renderpass;
-    VK_CHECK_RESULT(vkCreateRenderPass(device->logicalDevice, &renderPassCI, nullptr, &renderpass));
+    VK_CHECK_RESULT(vkCreateRenderPass(device->dev, &renderPassCI, nullptr, &renderpass));
 
     VkFramebufferCreateInfo framebufferCI{};
     framebufferCI.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -344,13 +346,13 @@ void pbrRenderer2::generateBRDFLUT()
     framebufferCI.layers = 1;
 
     VkFramebuffer framebuffer;
-    VK_CHECK_RESULT(vkCreateFramebuffer(device->logicalDevice, &framebufferCI, nullptr, &framebuffer));
+    VK_CHECK_RESULT(vkCreateFramebuffer(device->dev, &framebufferCI, nullptr, &framebuffer));
 
     // Desriptors
     VkDescriptorSetLayout descriptorsetlayout;
     VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI{};
     descriptorSetLayoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device->logicalDevice, &descriptorSetLayoutCI, nullptr, &descriptorsetlayout));
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device->dev, &descriptorSetLayoutCI, nullptr, &descriptorsetlayout));
 
     // Pipeline layout
     VkPipelineLayout pipelinelayout;
@@ -358,7 +360,7 @@ void pbrRenderer2::generateBRDFLUT()
     pipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutCI.setLayoutCount = 1;
     pipelineLayoutCI.pSetLayouts = &descriptorsetlayout;
-    VK_CHECK_RESULT(vkCreatePipelineLayout(device->logicalDevice, &pipelineLayoutCI, nullptr, &pipelinelayout));
+    VK_CHECK_RESULT(vkCreatePipelineLayout(device->dev, &pipelineLayoutCI, nullptr, &pipelinelayout));
 
     // Pipeline
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI{};
@@ -426,13 +428,13 @@ void pbrRenderer2::generateBRDFLUT()
 
     // Look-up-table (from BRDF) pipeline
     shaderStages = {
-        loadShader(device->logicalDevice, "genbrdflut.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
-        loadShader(device->logicalDevice, "genbrdflut.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
+        loadShader(device->dev, "genbrdflut.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
+        loadShader(device->dev, "genbrdflut.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
     };
     VkPipeline pipeline;
-    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->logicalDevice, pipelineCache, 1, &pipelineCI, nullptr, &pipeline));
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->dev, device->pipelineCache, 1, &pipelineCI, nullptr, &pipeline));
     for (auto shaderStage : shaderStages) {
-        vkDestroyShaderModule(device->logicalDevice, shaderStage.module, nullptr);
+        vkDestroyShaderModule(device->dev, shaderStage.module, nullptr);
     }
 
     // Render
@@ -470,11 +472,11 @@ void pbrRenderer2::generateBRDFLUT()
 
     vkQueueWaitIdle(device->queue);
 
-    vkDestroyPipeline(device->logicalDevice, pipeline, nullptr);
-    vkDestroyPipelineLayout(device->logicalDevice, pipelinelayout, nullptr);
-    vkDestroyRenderPass(device->logicalDevice, renderpass, nullptr);
-    vkDestroyFramebuffer(device->logicalDevice, framebuffer, nullptr);
-    vkDestroyDescriptorSetLayout(device->logicalDevice, descriptorsetlayout, nullptr);
+    vkDestroyPipeline(device->dev, pipeline, nullptr);
+    vkDestroyPipelineLayout(device->dev, pipelinelayout, nullptr);
+    vkDestroyRenderPass(device->dev, renderpass, nullptr);
+    vkDestroyFramebuffer(device->dev, framebuffer, nullptr);
+    vkDestroyDescriptorSetLayout(device->dev, descriptorsetlayout, nullptr);
 
     textures.lutBrdf.descriptor.imageView = textures.lutBrdf.view;
     textures.lutBrdf.descriptor.sampler = textures.lutBrdf.sampler;
@@ -527,15 +529,15 @@ void pbrRenderer2::generateCubemaps()
             imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
             imageCI.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
             imageCI.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-            VK_CHECK_RESULT(vkCreateImage(device->logicalDevice, &imageCI, nullptr, &cubemap.image));
+            VK_CHECK_RESULT(vkCreateImage(device->dev, &imageCI, nullptr, &cubemap.image));
             VkMemoryRequirements memReqs;
-            vkGetImageMemoryRequirements(device->logicalDevice, cubemap.image, &memReqs);
+            vkGetImageMemoryRequirements(device->dev, cubemap.image, &memReqs);
             VkMemoryAllocateInfo memAllocInfo{};
             memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
             memAllocInfo.allocationSize = memReqs.size;
             memAllocInfo.memoryTypeIndex = device->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-            VK_CHECK_RESULT(vkAllocateMemory(device->logicalDevice, &memAllocInfo, nullptr, &cubemap.deviceMemory));
-            VK_CHECK_RESULT(vkBindImageMemory(device->logicalDevice, cubemap.image, cubemap.deviceMemory, 0));
+            VK_CHECK_RESULT(vkAllocateMemory(device->dev, &memAllocInfo, nullptr, &cubemap.deviceMemory));
+            VK_CHECK_RESULT(vkBindImageMemory(device->dev, cubemap.image, cubemap.deviceMemory, 0));
 
             // View
             VkImageViewCreateInfo viewCI{};
@@ -547,7 +549,7 @@ void pbrRenderer2::generateCubemaps()
             viewCI.subresourceRange.levelCount = numMips;
             viewCI.subresourceRange.layerCount = 6;
             viewCI.image = cubemap.image;
-            VK_CHECK_RESULT(vkCreateImageView(device->logicalDevice, &viewCI, nullptr, &cubemap.view));
+            VK_CHECK_RESULT(vkCreateImageView(device->dev, &viewCI, nullptr, &cubemap.view));
 
             // Sampler
             VkSamplerCreateInfo samplerCI{};
@@ -562,7 +564,7 @@ void pbrRenderer2::generateCubemaps()
             samplerCI.maxLod = static_cast<float>(numMips);
             samplerCI.maxAnisotropy = 1.0f;
             samplerCI.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-            VK_CHECK_RESULT(vkCreateSampler(device->logicalDevice, &samplerCI, nullptr, &cubemap.sampler));
+            VK_CHECK_RESULT(vkCreateSampler(device->dev, &samplerCI, nullptr, &cubemap.sampler));
         }
 
         // FB, Att, RP, Pipe, etc.
@@ -610,7 +612,7 @@ void pbrRenderer2::generateCubemaps()
         renderPassCI.dependencyCount = 2;
         renderPassCI.pDependencies = dependencies.data();
         VkRenderPass renderpass;
-        VK_CHECK_RESULT(vkCreateRenderPass(device->logicalDevice, &renderPassCI, nullptr, &renderpass));
+        VK_CHECK_RESULT(vkCreateRenderPass(device->dev, &renderPassCI, nullptr, &renderpass));
 
         struct Offscreen {
             VkImage         image;
@@ -636,15 +638,15 @@ void pbrRenderer2::generateCubemaps()
             imageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             imageCI.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
             imageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            VK_CHECK_RESULT(vkCreateImage(device->logicalDevice, &imageCI, nullptr, &offscreen.image));
+            VK_CHECK_RESULT(vkCreateImage(device->dev, &imageCI, nullptr, &offscreen.image));
             VkMemoryRequirements memReqs;
-            vkGetImageMemoryRequirements(device->logicalDevice, offscreen.image, &memReqs);
+            vkGetImageMemoryRequirements(device->dev, offscreen.image, &memReqs);
             VkMemoryAllocateInfo memAllocInfo{};
             memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
             memAllocInfo.allocationSize = memReqs.size;
             memAllocInfo.memoryTypeIndex = device->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-            VK_CHECK_RESULT(vkAllocateMemory(device->logicalDevice, &memAllocInfo, nullptr, &offscreen.memory));
-            VK_CHECK_RESULT(vkBindImageMemory(device->logicalDevice, offscreen.image, offscreen.memory, 0));
+            VK_CHECK_RESULT(vkAllocateMemory(device->dev, &memAllocInfo, nullptr, &offscreen.memory));
+            VK_CHECK_RESULT(vkBindImageMemory(device->dev, offscreen.image, offscreen.memory, 0));
 
             // View
             VkImageViewCreateInfo viewCI{};
@@ -659,7 +661,7 @@ void pbrRenderer2::generateCubemaps()
             viewCI.subresourceRange.baseArrayLayer = 0;
             viewCI.subresourceRange.layerCount = 1;
             viewCI.image = offscreen.image;
-            VK_CHECK_RESULT(vkCreateImageView(device->logicalDevice, &viewCI, nullptr, &offscreen.view));
+            VK_CHECK_RESULT(vkCreateImageView(device->dev, &viewCI, nullptr, &offscreen.view));
 
             // Framebuffer
             VkFramebufferCreateInfo framebufferCI{};
@@ -670,7 +672,7 @@ void pbrRenderer2::generateCubemaps()
             framebufferCI.width = dim;
             framebufferCI.height = dim;
             framebufferCI.layers = 1;
-            VK_CHECK_RESULT(vkCreateFramebuffer(device->logicalDevice, &framebufferCI, nullptr, &offscreen.framebuffer));
+            VK_CHECK_RESULT(vkCreateFramebuffer(device->dev, &framebufferCI, nullptr, &offscreen.framebuffer));
 
             VkCommandBuffer layoutCmd = device->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
             VkImageMemoryBarrier imageMemoryBarrier{};
@@ -692,7 +694,7 @@ void pbrRenderer2::generateCubemaps()
         descriptorSetLayoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         descriptorSetLayoutCI.pBindings = &setLayoutBinding;
         descriptorSetLayoutCI.bindingCount = 1;
-        VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device->logicalDevice, &descriptorSetLayoutCI, nullptr, &descriptorsetlayout));
+        VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device->dev, &descriptorSetLayoutCI, nullptr, &descriptorsetlayout));
 
         // Descriptor Pool
         VkDescriptorPoolSize poolSize = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 };
@@ -702,7 +704,7 @@ void pbrRenderer2::generateCubemaps()
         descriptorPoolCI.pPoolSizes = &poolSize;
         descriptorPoolCI.maxSets = 2;
         VkDescriptorPool descriptorpool;
-        VK_CHECK_RESULT(vkCreateDescriptorPool(device->logicalDevice, &descriptorPoolCI, nullptr, &descriptorpool));
+        VK_CHECK_RESULT(vkCreateDescriptorPool(device->dev, &descriptorPoolCI, nullptr, &descriptorpool));
 
         // Descriptor sets
         VkDescriptorSet descriptorset;
@@ -711,7 +713,7 @@ void pbrRenderer2::generateCubemaps()
         descriptorSetAllocInfo.descriptorPool = descriptorpool;
         descriptorSetAllocInfo.pSetLayouts = &descriptorsetlayout;
         descriptorSetAllocInfo.descriptorSetCount = 1;
-        VK_CHECK_RESULT(vkAllocateDescriptorSets(device->logicalDevice, &descriptorSetAllocInfo, &descriptorset));
+        VK_CHECK_RESULT(vkAllocateDescriptorSets(device->dev, &descriptorSetAllocInfo, &descriptorset));
         VkWriteDescriptorSet writeDescriptorSet{};
         writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -719,7 +721,7 @@ void pbrRenderer2::generateCubemaps()
         writeDescriptorSet.dstSet = descriptorset;
         writeDescriptorSet.dstBinding = 0;
         writeDescriptorSet.pImageInfo = &textures.environmentCube.descriptor;
-        vkUpdateDescriptorSets(device->logicalDevice, 1, &writeDescriptorSet, 0, nullptr);
+        vkUpdateDescriptorSets(device->dev, 1, &writeDescriptorSet, 0, nullptr);
 
         struct PushBlockIrradiance {
             glm::mat4 mvp;
@@ -753,7 +755,7 @@ void pbrRenderer2::generateCubemaps()
         pipelineLayoutCI.pSetLayouts = &descriptorsetlayout;
         pipelineLayoutCI.pushConstantRangeCount = 1;
         pipelineLayoutCI.pPushConstantRanges = &pushConstantRange;
-        VK_CHECK_RESULT(vkCreatePipelineLayout(device->logicalDevice, &pipelineLayoutCI, nullptr, &pipelinelayout));
+        VK_CHECK_RESULT(vkCreatePipelineLayout(device->dev, &pipelineLayoutCI, nullptr, &pipelinelayout));
 
         // Pipeline
         VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI{};
@@ -828,19 +830,19 @@ void pbrRenderer2::generateCubemaps()
         pipelineCI.pStages = shaderStages.data();
         pipelineCI.renderPass = renderpass;
 
-        shaderStages[0] = loadShader(device->logicalDevice, "filtercube.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+        shaderStages[0] = loadShader(device->dev, "filtercube.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
         switch (target) {
             case IRRADIANCE:
-                shaderStages[1] = loadShader(device->logicalDevice, "irradiancecube.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+                shaderStages[1] = loadShader(device->dev, "irradiancecube.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
                 break;
             case PREFILTEREDENV:
-                shaderStages[1] = loadShader(device->logicalDevice, "prefilterenvmap.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+                shaderStages[1] = loadShader(device->dev, "prefilterenvmap.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
                 break;
         };
         VkPipeline pipeline;
-        VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->logicalDevice, pipelineCache, 1, &pipelineCI, nullptr, &pipeline));
+        VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->dev, device->pipelineCache, 1, &pipelineCI, nullptr, &pipeline));
         for (auto shaderStage : shaderStages) {
-            vkDestroyShaderModule(device->logicalDevice, shaderStage.module, nullptr);
+            vkDestroyShaderModule(device->dev, shaderStage.module, nullptr);
         }
 
         // Render cubemap
@@ -985,15 +987,15 @@ void pbrRenderer2::generateCubemaps()
 
         device->flushCommandBuffer(cmdBuf, device->queue);
 
-        vkDestroyRenderPass(device->logicalDevice, renderpass, nullptr);
-        vkDestroyFramebuffer(device->logicalDevice, offscreen.framebuffer, nullptr);
-        vkFreeMemory(device->logicalDevice, offscreen.memory, nullptr);
-        vkDestroyImageView(device->logicalDevice, offscreen.view, nullptr);
-        vkDestroyImage(device->logicalDevice, offscreen.image, nullptr);
-        vkDestroyDescriptorPool(device->logicalDevice, descriptorpool, nullptr);
-        vkDestroyDescriptorSetLayout(device->logicalDevice, descriptorsetlayout, nullptr);
-        vkDestroyPipeline(device->logicalDevice, pipeline, nullptr);
-        vkDestroyPipelineLayout(device->logicalDevice, pipelinelayout, nullptr);
+        vkDestroyRenderPass(device->dev, renderpass, nullptr);
+        vkDestroyFramebuffer(device->dev, offscreen.framebuffer, nullptr);
+        vkFreeMemory(device->dev, offscreen.memory, nullptr);
+        vkDestroyImageView(device->dev, offscreen.view, nullptr);
+        vkDestroyImage(device->dev, offscreen.image, nullptr);
+        vkDestroyDescriptorPool(device->dev, descriptorpool, nullptr);
+        vkDestroyDescriptorSetLayout(device->dev, descriptorsetlayout, nullptr);
+        vkDestroyPipeline(device->dev, pipeline, nullptr);
+        vkDestroyPipelineLayout(device->dev, pipelinelayout, nullptr);
 
         cubemap.descriptor.imageView = cubemap.view;
         cubemap.descriptor.sampler = cubemap.sampler;

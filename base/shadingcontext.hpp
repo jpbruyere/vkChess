@@ -25,13 +25,17 @@ namespace vks {
             device = _device;
             maxSets = maxDescriptorSet;
         }
+        virtual ~ShadingContext() {
+            for(uint i=0; i<layouts.size(); i++)
+                vkDestroyDescriptorSetLayout(device->dev, layouts[i], VK_NULL_HANDLE);
+            vkDestroyDescriptorPool(device->dev, descriptorPool, VK_NULL_HANDLE);
+        }
 
         uint32_t addDescriptorSetLayout (const std::vector<VkDescriptorSetLayoutBinding>& descriptorSetLayoutBinding) {
             uint32_t idx = descriptorSetLayoutBindings.size();
             descriptorSetLayoutBindings.push_back (descriptorSetLayoutBinding);
             return idx;
         }
-
 
         void prepare () {
             uint32_t descTypeCount[VK_DESCRIPTOR_TYPE_END_RANGE+1] = {};
@@ -49,14 +53,14 @@ namespace vks {
             poolInfo.poolSizeCount  = (uint32_t)poolSizes.size();
             poolInfo.pPoolSizes     = poolSizes.data();
             poolInfo.maxSets        = maxSets;
-            VK_CHECK_RESULT(vkCreateDescriptorPool(device->logicalDevice, &poolInfo, nullptr, &descriptorPool));
+            VK_CHECK_RESULT(vkCreateDescriptorPool(device->dev, &poolInfo, nullptr, &descriptorPool));
 
             layouts.resize(descriptorSetLayoutBindings.size());
             for(uint i=0; i<descriptorSetLayoutBindings.size(); i++) {
                 VkDescriptorSetLayoutCreateInfo layoutInfos = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
                 layoutInfos.bindingCount= (uint32_t)descriptorSetLayoutBindings[i].size();
                 layoutInfos.pBindings	= descriptorSetLayoutBindings[i].data();
-                VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device->logicalDevice, &layoutInfos, nullptr, &layouts[i]));
+                VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device->dev, &layoutInfos, nullptr, &layouts[i]));
             }
         }
 
@@ -66,7 +70,7 @@ namespace vks {
             dsInfo.descriptorPool       = descriptorPool;
             dsInfo.pSetLayouts          = &layouts[layoutIndex];
             dsInfo.descriptorSetCount   = 1;
-            VK_CHECK_RESULT(vkAllocateDescriptorSets(device->logicalDevice, &dsInfo, &ds));
+            VK_CHECK_RESULT(vkAllocateDescriptorSets(device->dev, &dsInfo, &ds));
             return ds;
         }
         void updateDescriptorSet (VkDescriptorSet ds, const std::vector<BindingSlot>& slots) {
@@ -77,7 +81,7 @@ namespace vks {
                 writeDescriptorSets.push_back (
                             slots[i].pResource->getWriteDescriptorSet (ds, dslb.binding, dslb.descriptorType));
             }
-            vkUpdateDescriptorSets(device->logicalDevice,(uint32_t) writeDescriptorSets.size(), writeDescriptorSets.data(), 0, NULL);
+            vkUpdateDescriptorSets(device->dev,(uint32_t) writeDescriptorSets.size(), writeDescriptorSets.data(), 0, NULL);
         }
     };
 }

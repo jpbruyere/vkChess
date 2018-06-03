@@ -39,6 +39,7 @@
 
 #include <string>
 #include <sstream>
+#include <fstream>
 #include <array>
 #include <vector>
 #include <numeric>
@@ -92,7 +93,7 @@ private:
     RenderTarget multisampleTarget;
 protected:
     VkInstance instance;
-    VkPhysicalDevice physicalDevice;
+    VkPhysicalDevice phy;
     VkPhysicalDeviceProperties deviceProperties;
     VkPhysicalDeviceFeatures deviceFeatures;
     VkPhysicalDeviceMemoryProperties deviceMemoryProperties;
@@ -102,7 +103,6 @@ protected:
     VkFormat depthFormat;
     VkRenderPass renderPass;
     VkFramebuffer frameBuffer;
-    VkPipelineCache pipelineCache;
     VulkanSwapChain swapChain;
     VkSemaphore presentCompleteSemaphore;
     std::string title = "Vulkan Example";

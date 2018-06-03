@@ -42,15 +42,15 @@ namespace vks
 
             memoryPropertyFlags = _memoryPropertyFlags;
 
-            VK_CHECK_RESULT(vkCreateBuffer(device->logicalDevice, &infos, nullptr, &buffer));
+            VK_CHECK_RESULT(vkCreateBuffer(device->dev, &infos, nullptr, &buffer));
 
-            vkGetBufferMemoryRequirements(device->logicalDevice, buffer, &memReqs);
+            vkGetBufferMemoryRequirements(device->dev, buffer, &memReqs);
 
             VkMemoryAllocateInfo memAlloc = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
             memAlloc.allocationSize = memReqs.size;
             memAlloc.memoryTypeIndex = device->getMemoryType(memReqs.memoryTypeBits, _memoryPropertyFlags);
 
-            VK_CHECK_RESULT(vkAllocateMemory(device->logicalDevice, &memAlloc, nullptr, &deviceMemory));
+            VK_CHECK_RESULT(vkAllocateMemory(device->dev, &memAlloc, nullptr, &deviceMemory));
 
             size = memAlloc.allocationSize;
 
@@ -71,20 +71,20 @@ namespace vks
 
         VkResult map(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0)
         {
-            return vkMapMemory(device->logicalDevice, deviceMemory, offset, size, 0, &mapped);
+            return vkMapMemory(device->dev, deviceMemory, offset, size, 0, &mapped);
         }
         void unmap()
         {
             if (mapped)
             {
-                vkUnmapMemory(device->logicalDevice, deviceMemory);
+                vkUnmapMemory(device->dev, deviceMemory);
                 mapped = nullptr;
             }
         }
 
         VkResult bind(VkDeviceSize offset = 0)
         {
-            return vkBindBufferMemory(device->logicalDevice, buffer, deviceMemory, offset);
+            return vkBindBufferMemory(device->dev, buffer, deviceMemory, offset);
         }
 
         void setupDescriptor(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0)
@@ -134,7 +134,7 @@ namespace vks
             mappedRange.memory = deviceMemory;
             mappedRange.offset = offset;
             mappedRange.size = size;
-            return vkFlushMappedMemoryRanges(device->logicalDevice, 1, &mappedRange);
+            return vkFlushMappedMemoryRanges(device->dev, 1, &mappedRange);
         }
 
         /**
@@ -153,7 +153,7 @@ namespace vks
             mappedRange.memory = deviceMemory;
             mappedRange.offset = offset;
             mappedRange.size = size;
-            return vkInvalidateMappedMemoryRanges(device->logicalDevice, 1, &mappedRange);
+            return vkInvalidateMappedMemoryRanges(device->dev, 1, &mappedRange);
         }
 
         /**
@@ -164,9 +164,9 @@ namespace vks
             unmap();
 
             if (deviceMemory)
-                vkFreeMemory(device->logicalDevice, deviceMemory, nullptr);
+                vkFreeMemory(device->dev, deviceMemory, nullptr);
             if (buffer)
-                vkDestroyBuffer(device->logicalDevice, buffer, nullptr);
+                vkDestroyBuffer(device->dev, buffer, nullptr);
 
         }
 

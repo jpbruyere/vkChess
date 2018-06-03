@@ -41,12 +41,12 @@ namespace vks
             VkMemoryAllocateInfo memAllocInfo{};
             memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 
-            VK_CHECK_RESULT(vkCreateImage(device->logicalDevice, &infos, nullptr, &image));
-            vkGetImageMemoryRequirements(device->logicalDevice, image, &memReqs);
+            VK_CHECK_RESULT(vkCreateImage(device->dev, &infos, nullptr, &image));
+            vkGetImageMemoryRequirements(device->dev, image, &memReqs);
             memAllocInfo.allocationSize = memReqs.size;
             memAllocInfo.memoryTypeIndex = device->getMemoryType(memReqs.memoryTypeBits, memProps);
-            VK_CHECK_RESULT(vkAllocateMemory(device->logicalDevice, &memAllocInfo, nullptr, &deviceMemory));
-            VK_CHECK_RESULT(vkBindImageMemory(device->logicalDevice, image, deviceMemory, 0));
+            VK_CHECK_RESULT(vkAllocateMemory(device->dev, &memAllocInfo, nullptr, &deviceMemory));
+            VK_CHECK_RESULT(vkBindImageMemory(device->dev, image, deviceMemory, 0));
         }
         Texture (){}
         Texture (vks::VulkanDevice*  _device){
@@ -140,12 +140,12 @@ namespace vks
         void destroy()
         {
             if (view)
-                vkDestroyImageView  (device->logicalDevice, view, VK_NULL_HANDLE);
+                vkDestroyImageView  (device->dev, view, VK_NULL_HANDLE);
             if (sampler)
-                vkDestroySampler    (device->logicalDevice, sampler, VK_NULL_HANDLE);
+                vkDestroySampler    (device->dev, sampler, VK_NULL_HANDLE);
             if (image){
-                vkDestroyImage      (device->logicalDevice, image, VK_NULL_HANDLE);
-                vkFreeMemory        (device->logicalDevice, deviceMemory, VK_NULL_HANDLE);
+                vkDestroyImage      (device->dev, image, VK_NULL_HANDLE);
+                vkFreeMemory        (device->dev, deviceMemory, VK_NULL_HANDLE);
             }
         }
         void setImageLayout(
@@ -321,7 +321,7 @@ namespace vks
             viewInfo.subresourceRange.aspectMask = aspectMask;
             viewInfo.subresourceRange.levelCount = levelCount;
             viewInfo.subresourceRange.layerCount = layerCount;
-            VK_CHECK_RESULT(vkCreateImageView(device->logicalDevice, &viewInfo, nullptr, &view));
+            VK_CHECK_RESULT(vkCreateImageView(device->dev, &viewInfo, nullptr, &view));
         }
 
         void createSampler (VkFilter filter = VK_FILTER_NEAREST, VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT,
@@ -342,7 +342,7 @@ namespace vks
             samplerInfo.anisotropyEnable = device->enabledFeatures.samplerAnisotropy;
             samplerInfo.minLod = 0;
             samplerInfo.maxLod = infos.mipLevels;
-            VK_CHECK_RESULT(vkCreateSampler(device->logicalDevice, &samplerInfo, nullptr, &sampler));
+            VK_CHECK_RESULT(vkCreateSampler(device->dev, &samplerInfo, nullptr, &sampler));
         }
         void buildMipmaps (VkQueue copyQueue, VkCommandBuffer _blitCmd = VK_NULL_HANDLE) {
             // Generate the mip chain (glTF uses jpg and png, so we need to create this manually)
@@ -410,10 +410,10 @@ namespace vks
             VkSubresourceLayout subResLayout;
 
             void *data;
-            vkGetImageSubresourceLayout(device->logicalDevice, image, &subRes, &subResLayout);
-            VK_CHECK_RESULT(vkMapMemory(device->logicalDevice, deviceMemory, 0, imgSize, 0, &data));
+            vkGetImageSubresourceLayout(device->dev, image, &subRes, &subResLayout);
+            VK_CHECK_RESULT(vkMapMemory(device->dev, deviceMemory, 0, imgSize, 0, &data));
             memcpy(data, img, imgSize);	// Copy image data into memory
-            vkUnmapMemory(device->logicalDevice, deviceMemory);
+            vkUnmapMemory(device->dev, deviceMemory);
 
             stbi_image_free(img);
             stbi_set_flip_vertically_on_load(false);
