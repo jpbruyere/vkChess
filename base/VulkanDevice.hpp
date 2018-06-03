@@ -14,22 +14,26 @@
 #include <assert.h>
 #include <algorithm>
 #include <vector>
-#include "vulkan/vulkan.h"
+//#include "vulkan/vulkan.h"
 #include "macros.h"
-#include "VulkanBuffer.hpp"
+#include "VkEngine.h"
+
+//#include "VulkanBuffer.hpp"
 
 namespace vks
 {
     struct VulkanDevice
     {
-        VkPhysicalDevice physicalDevice;
-        VkDevice logicalDevice;
-        VkPhysicalDeviceProperties properties;
-        VkPhysicalDeviceFeatures features;
-        VkPhysicalDeviceFeatures enabledFeatures;
-        VkPhysicalDeviceMemoryProperties memoryProperties;
-        std::vector<VkQueueFamilyProperties> queueFamilyProperties;
+        VkPhysicalDevice            physicalDevice;
+        VkDevice                    logicalDevice;
+        VkPhysicalDeviceProperties  properties;
+        VkPhysicalDeviceFeatures    features;
+        VkPhysicalDeviceFeatures    enabledFeatures;
+        VkPhysicalDeviceMemoryProperties    memoryProperties;
+        std::vector<VkQueueFamilyProperties>queueFamilyProperties;
         VkCommandPool commandPool = VK_NULL_HANDLE;
+
+        VkQueue queue;
 
         struct {
             uint32_t graphics;
@@ -213,63 +217,14 @@ namespace vks
 
             VkResult result = vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &logicalDevice);
 
-            if (result == VK_SUCCESS) {
+            if (result == VK_SUCCESS)
                 commandPool = createCommandPool(queueFamilyIndices.graphics);
-            }
 
             this->enabledFeatures = enabledFeatures;
 
+            vkGetDeviceQueue(logicalDevice, queueFamilyIndices.graphics, 0, &queue);
+
             return result;
-        }
-
-        /**
-        * Create a buffer on the device
-        *
-        * @param usageFlags Usage flag bitmask for the buffer (i.e. index, vertex, uniform buffer)
-        * @param memoryPropertyFlags Memory properties for this buffer (i.e. device local, host visible, coherent)
-        * @param buffer Pointer to a vk::Vulkan buffer object
-        * @param size Size of the buffer in byes
-        * @param data Pointer to the data that should be copied to the buffer after creation (optional, if not set, no data is copied over)
-        *
-        * @return VK_SUCCESS if buffer handle and memory have been created and (optionally passed) data has been copied
-        */
-        VkResult createBuffer(VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags memoryPropertyFlags, vks::Buffer *buffer, VkDeviceSize size, void *data = nullptr)
-        {
-            buffer->device = logicalDevice;
-
-            // Create the buffer handle
-            VkBufferCreateInfo bufferCreateInfo =
-            {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, NULL, 0, size, usageFlags, VK_SHARING_MODE_EXCLUSIVE};
-            VK_CHECK_RESULT(vkCreateBuffer(logicalDevice, &bufferCreateInfo, nullptr, &buffer->buffer));
-
-            // Create the memory backing up the buffer handle
-            VkMemoryRequirements memReqs;
-            vkGetBufferMemoryRequirements(logicalDevice, buffer->buffer, &memReqs);
-
-            VkMemoryAllocateInfo memAlloc = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-            memAlloc.allocationSize = memReqs.size;
-            memAlloc.memoryTypeIndex = getMemoryType(memReqs.memoryTypeBits, memoryPropertyFlags);
-
-            VK_CHECK_RESULT(vkAllocateMemory(logicalDevice, &memAlloc, nullptr, &buffer->memory));
-
-            buffer->alignment = memReqs.alignment;
-            buffer->size = memAlloc.allocationSize;
-            buffer->usageFlags = usageFlags;
-            buffer->memoryPropertyFlags = memoryPropertyFlags;
-
-            // If a pointer to the buffer data has been passed, map the buffer and copy over the data
-            if (data != nullptr)
-            {
-                VK_CHECK_RESULT(buffer->map());
-                memcpy(buffer->mapped, data, size);
-                buffer->unmap();
-            }
-
-            // Initialize a default descriptor that covers the whole buffer size
-            buffer->setupDescriptor();
-
-            // Attach the memory to the buffer object
-            return buffer->bind();
         }
 
         /**

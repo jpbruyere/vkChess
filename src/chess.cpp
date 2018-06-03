@@ -25,15 +25,16 @@
 #include <iostream>
 #include <errno.h>
 
-#include "vkpbrrenderer.h"
+#include "VkEngine.h"
 #include "vkrenderer.h"
+#include "pbrrenderer2.h"
 
 #include <glm/gtx/spline.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 
 #define CAPTURE_ZONE_HEIGHT 5
 
-class VkEngine : public vkPbrRenderer
+class VkEngine : public VulkanExampleBase
 {
 public:
     enum Color { White, Black };
@@ -67,9 +68,11 @@ public:
         std::queue<glm::mat4> queue;
     };
 
-    vkRenderer* debugRenderer = nullptr;
+    vkRenderer*     debugRenderer = nullptr;
+    pbrRenderer2*   sceneRenderer = nullptr;
 
-    VkEngine() : vkPbrRenderer()
+
+    VkEngine() : VulkanExampleBase()
     {
         title = "Vulkan Chess glTf 2.0 PBR";
         camera.type = Camera::CameraType::firstperson;
@@ -85,7 +88,7 @@ public:
     ~VkEngine()
     {
         delete(debugRenderer);
-
+        delete(sceneRenderer);
     }
 
     const glm::vec4 hoverColor      = glm::vec4(0.0,0.0,0.1,1.0);
@@ -129,9 +132,6 @@ public:
     int movesPtr;
 
     void update(){
-//        if (animations.empty())
-//            return;
-
         readStockfishLine();
 
         std::vector<animation>::iterator itr = animations.begin();
@@ -234,7 +234,6 @@ public:
         }
         return ptr;
     }
-
     void readStockfishLine () {
         char c = 0;
         char lineBuf[1024];
@@ -362,6 +361,7 @@ public:
             _exit(0);
         }
     }
+
     //actualize board[][] array
     void boardMove (Piece* pce, glm::ivec2 newPos, bool animate = false) {
         if (!pce->captured)
@@ -396,7 +396,6 @@ public:
         if (rebuildCmdBuffs)
             rebuildCommandBuffers();
     }
-
     void promote(Piece* p, PceType promotion) {
         uint32_t primIdx;
         switch (promotion) {
@@ -418,6 +417,7 @@ public:
         p->promoted = true;
         p->type = promotion;
     }
+
     void replay (int untilPtr) {
         resetBoard(false);
 
@@ -577,7 +577,6 @@ public:
 
         return kingOk;
     }
-
 
     std::vector<glm::ivec2> validMoves;
 
@@ -827,75 +826,7 @@ public:
     const char* caseX = "abcdefgh";
     uint32_t casesInstances[8][8];
 
-    virtual void loadAssets() {
-        vkPbrRenderer::loadAssets();
 
-        models2.resize(1);
-        mod = &models2[0];
-
-        //mod->loadFromFile("/home/jp/gltf/chess/blend.gltf", vulkanDevice, queue, true);
-        mod->loadFromFile("data/models/chess.gltf", vulkanDevice, queue, true);
-
-        mod->addInstance("frame", glm::translate(glm::mat4(1.0),       glm::vec3( 0,0,0)));
-
-        //for (int i=0; i<mod->primitives.size(); i++)
-        //    printf("primitive: %s\n", mod->primitives[i].name.c_str());
-
-
-
-        blackMatIdx = mod->getMaterialIndex("black");
-
-
-        addPiece(00, "rook",  Rook, White,    0, 0);
-        addPiece(07, "rook",  Rook, White,    7, 0);
-        addPiece(16, "rook",  Rook, Black,    0, 7);
-        addPiece(23, "rook",  Rook, Black,    7, 7);
-        addPiece(01, "knight",Knight, White,  1, 0);
-        addPiece(06, "knight",Knight, White,  6, 0);
-        addPiece(17, "knight",Knight, Black,  1, 7, M_PI);
-        addPiece(22, "knight",Knight, Black,  6, 7, M_PI);
-        addPiece(02, "bishop",Bishop, White,  2, 0);
-        addPiece(05, "bishop",Bishop, White,  5, 0);
-        addPiece(18, "bishop",Bishop, Black,  2, 7);
-        addPiece(21, "bishop",Bishop, Black,  5, 7);
-        addPiece(03, "queen", Queen, White,   3, 0);
-        addPiece(19, "queen", Queen, Black,   3, 7);
-        addPiece(04, "king",  King, White,    4, 0);
-        addPiece(20, "king",  King, Black,    4, 7);
-
-        for (int i=0; i<8; i++)
-            addPiece(8 + i, "pawn", Pawn, White, i, 1);
-        for (int i=0; i<8; i++){
-            addPiece(24 + i, "pawn", Pawn, Black, i, 6);
-        }
-
-
-
-        for (int y=0; y<8; y++) {
-            for (int x=0; x<8; x++) {
-                casesInstances[x][y] = mod->addInstance(caseX[x] + std::to_string(y+1) + "\0", glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
-            }
-        }
-    }
-    virtual void prepare() {
-        vkPbrRenderer::prepare();
-
-        debugRenderer = new vkRenderer (vulkanDevice, &swapChain, depthFormat, settings.sampleCount,
-                                                        &sharedUBOs.matrices);
-
-        //debugRenderer->clear();
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,1,0), glm::vec3(0,1,0));
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,0,1), glm::vec3(0,0,1));
-        debugRenderer->flush();
-
-        startStockFish();
-
-        if (getStockFishIsReady())
-            std::cout << "stockfish is ready" << std::endl;
-
-        startGame();
-    }
     inline glm::vec4 getCaseLight (glm::ivec2 c) {
         return mod->instanceDatas[casesInstances[c.x][c.y]].color;
     }
@@ -961,6 +892,7 @@ public:
         debugRenderer->drawLine(p, glm::vec3(p.x,0,p.z), color);
     }
     glm::vec3 vResult;
+
     virtual void handleMouseButtonDown(int butIndex) {
         if (butIndex != 1)
             return;
@@ -1062,9 +994,79 @@ public:
             toogleHint();
             break;
         default:
-            vkPbrRenderer::keyPressed(key);
+            VulkanExampleBase::keyPressed(key);
             break;
         }
+    }
+
+    virtual void prepareRenderers() {
+        sceneRenderer = new pbrRenderer2();
+        sceneRenderer->create(vulkanDevice, &swapChain, depthFormat, settings.sampleCount, sharedUBOs);
+
+        sceneRenderer->models.resize(1);
+        mod = &sceneRenderer->models[0];
+
+        mod->loadFromFile ("data/models/chess.gltf", vulkanDevice, true);
+
+        mod->addInstance("frame", glm::translate(glm::mat4(1.0),       glm::vec3( 0,0,0)));
+
+        blackMatIdx = mod->getMaterialIndex("black");
+
+        addPiece(00, "rook",  Rook, White,    0, 0);
+        addPiece(07, "rook",  Rook, White,    7, 0);
+        addPiece(16, "rook",  Rook, Black,    0, 7);
+        addPiece(23, "rook",  Rook, Black,    7, 7);
+        addPiece(01, "knight",Knight, White,  1, 0);
+        addPiece(06, "knight",Knight, White,  6, 0);
+        addPiece(17, "knight",Knight, Black,  1, 7, M_PI);
+        addPiece(22, "knight",Knight, Black,  6, 7, M_PI);
+        addPiece(02, "bishop",Bishop, White,  2, 0);
+        addPiece(05, "bishop",Bishop, White,  5, 0);
+        addPiece(18, "bishop",Bishop, Black,  2, 7);
+        addPiece(21, "bishop",Bishop, Black,  5, 7);
+        addPiece(03, "queen", Queen, White,   3, 0);
+        addPiece(19, "queen", Queen, Black,   3, 7);
+        addPiece(04, "king",  King, White,    4, 0);
+        addPiece(20, "king",  King, Black,    4, 7);
+
+        for (int i=0; i<8; i++)
+            addPiece(8 + i, "pawn", Pawn, White, i, 1);
+        for (int i=0; i<8; i++)
+            addPiece(24 + i, "pawn", Pawn, Black, i, 6);
+
+        for (int y=0; y<8; y++)
+            for (int x=0; x<8; x++)
+                casesInstances[x][y] = mod->addInstance(caseX[x] + std::to_string(y+1) + "\0",
+                                                        glm::translate(glm::mat4(1.0), glm::vec3( 0,0,0)));
+
+        sceneRenderer->prepareModels();
+        sceneRenderer->buildCommandBuffer();
+
+        debugRenderer = new vkRenderer ();
+        debugRenderer->create(vulkanDevice, &swapChain, depthFormat, settings.sampleCount, sharedUBOs);
+        //debugRenderer->clear();
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,1,0), glm::vec3(0,1,0));
+        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,0,1), glm::vec3(0,0,1));
+        debugRenderer->flush();
+    }
+    virtual void prepare() {
+        VulkanExampleBase::prepare();
+
+        prepareRenderers();
+
+        startStockFish();
+
+        if (getStockFishIsReady())
+            std::cout << "stockfish is ready" << std::endl;
+
+        startGame();
+    }
+    void buildCommandBuffers() {
+
+    }
+    void rebuildCommandBuffers() {
+
     }
 
     void render () {
@@ -1073,11 +1075,11 @@ public:
 
         prepareFrame();
 
-        this->submit(queue, &presentCompleteSemaphore, 1);
+        sceneRenderer->submit(vulkanDevice->queue, &presentCompleteSemaphore, 1);
         //VK_CHECK_RESULT(swapChain.queuePresent(queue, this->drawComplete));
 
-        debugRenderer->submit(queue,&this->drawComplete, 1);
-        VK_CHECK_RESULT(swapChain.queuePresent(queue, debugRenderer->drawComplete));
+        //debugRenderer->submit(vulkanDevice->queue,&sceneRenderer->drawComplete, 1);
+        VK_CHECK_RESULT(swapChain.queuePresent(vulkanDevice->queue, sceneRenderer->drawComplete));
 
         update();
     }

@@ -4,21 +4,19 @@
 
 const VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-btVKDebugDrawer::btVKDebugDrawer(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
-                                 VkFormat depthFormat, VkSampleCountFlagBits _sampleCount,
-                                 std::vector<VkFramebuffer>&_frameBuffers, vks::Buffer* _uboMatrices,
-                                 std::string fontFnt, vks::Texture& fontTexture)
-:vkRenderer(_device, _swapChain, depthFormat, _sampleCount, _uboMatrices)
-{
+btVKDebugDrawer::btVKDebugDrawer() : vkRenderer(){}
+
+void btVKDebugDrawer::create (vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
+                         VkFormat depthFormat, VkSampleCountFlagBits _sampleCount,
+                         std::vector<VkFramebuffer>&_frameBuffers, VulkanExampleBase::UniformBuffers& _sharedUbos,
+                         std::string fontFnt, vks::Texture& fontTexture) {
     m_debugMode = 0;
 
     fontChars = parsebmFont(fontFnt);
     texSDFFont = fontTexture;
 
-    prepareDescriptors();
-    preparePipeline ();
+    vkRenderer::create(_device, _swapChain, depthFormat, _sampleCount, _sharedUbos);
 }
-
 btVKDebugDrawer::~btVKDebugDrawer()
 {
     if (prepared)
@@ -30,42 +28,27 @@ void btVKDebugDrawer::destroy() {
     vkDestroyPipeline       (device->logicalDevice, pipelineSDFF, VK_NULL_HANDLE);
 }
 
+void btVKDebugDrawer::configurePipelineLayout() {
+    shadingCtx = new vks::ShadingContext (device);
+
+    shadingCtx->addDescriptorSetLayout(
+    {
+        { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr },
+        { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr }
+    });
+
+    shadingCtx->prepare();
+}
 void btVKDebugDrawer::prepareDescriptors()
 {
-    std::vector<VkDescriptorPoolSize> poolSizes = {
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 },
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 },
-    };
-    VkDescriptorPoolCreateInfo descriptorPoolCI = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-    descriptorPoolCI.poolSizeCount = 2;
-    descriptorPoolCI.pPoolSizes = poolSizes.data();
-    descriptorPoolCI.maxSets = 1;
-    VK_CHECK_RESULT(vkCreateDescriptorPool(device->logicalDevice, &descriptorPoolCI, nullptr, &descriptorPool));
+    descriptorSet = shadingCtx->allocateDescriptorSet(0);
 
-    // Descriptor set layout
-    std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
-        { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr },
-        { 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr },
-    };
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    descriptorSetLayoutCI.pBindings = setLayoutBindings.data();
-    descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device->logicalDevice, &descriptorSetLayoutCI, nullptr, &descriptorSetLayout));
-
-    VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-    descriptorSetAllocInfo.descriptorPool = descriptorPool;
-    descriptorSetAllocInfo.pSetLayouts = &descriptorSetLayout;
-    descriptorSetAllocInfo.descriptorSetCount = 1;
-    VK_CHECK_RESULT(vkAllocateDescriptorSets(device->logicalDevice, &descriptorSetAllocInfo, &descriptorSet));
-
-    std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
-        {createWriteDS (descriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uboMatrices->descriptor)},
-        {createWriteDS (descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &texSDFFont.descriptor)}
-    };
-
-    vkUpdateDescriptorSets(device->logicalDevice, 2, writeDescriptorSets.data(), 0, NULL);
+    shadingCtx->updateDescriptorSet (descriptorSet,
+        {
+            {0,0,&sharedUBOs.matrices},
+            {0,1,&texSDFFont}
+        });
 }
-
 void btVKDebugDrawer::preparePipeline () {
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
     inputAssemblyStateCI.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
@@ -116,8 +99,8 @@ void btVKDebugDrawer::preparePipeline () {
     dynamicStateCI.dynamicStateCount = static_cast<uint32_t>(dynamicStateEnables.size());
 
     VkPipelineLayoutCreateInfo pipelineLayoutCI = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    pipelineLayoutCI.setLayoutCount = 1;
-    pipelineLayoutCI.pSetLayouts = &descriptorSetLayout;
+    pipelineLayoutCI.setLayoutCount = shadingCtx->layouts.size();
+    pipelineLayoutCI.pSetLayouts    = shadingCtx->layouts.data();
     VK_CHECK_RESULT(vkCreatePipelineLayout(device->logicalDevice, &pipelineLayoutCI, nullptr, &pipelineLayout));
 
     // Vertex bindings an attributes
@@ -250,7 +233,6 @@ void btVKDebugDrawer::clear(){
     sdffVertices.clear();
     sdffVertexCount = 0;
 }
-
 void btVKDebugDrawer::flush(){
     vkRenderer::flush();
     vertexCount = vertices.size() / 6;
@@ -288,7 +270,6 @@ void btVKDebugDrawer::drawLine(const btVector3& from,const btVector3& to,const b
 {
     drawLine(from,to,color,color);
 }
-
 void btVKDebugDrawer::drawSphere (const btVector3& p, btScalar radius, const btVector3& color)
 {
 //	glColor4f (color.getX(), color.getY(), color.getZ(), btScalar(1.0f));
@@ -324,9 +305,6 @@ void btVKDebugDrawer::drawSphere (const btVector3& p, btScalar radius, const btV
 
 //	glPopMatrix();
 }
-
-
-
 void btVKDebugDrawer::drawTriangle(const btVector3& a,const btVector3& b,const btVector3& c,const btVector3& color,btScalar alpha)
 {
     if (m_debugMode > 1)
@@ -336,13 +314,11 @@ void btVKDebugDrawer::drawTriangle(const btVector3& a,const btVector3& b,const b
         drawLine(c,a,color);
     }
 }
-
 void btVKDebugDrawer::setDebugMode(int debugMode)
 {
     m_debugMode = debugMode;
 
 }
-
 void btVKDebugDrawer::draw3dText(const btVector3& location, const char* textString)
 {
     generateText (textString, location, 1.0f);
@@ -351,12 +327,10 @@ void btVKDebugDrawer::draw3dText(const btVector3& location, const char* textStri
     //BMF_DrawString(BMF_GetFont(BMF_kHelvetica10),textString);
 
 }
-
 void btVKDebugDrawer::reportErrorWarning(const char* warningString)
 {
     printf("%s\n",warningString);
 }
-
 void btVKDebugDrawer::drawContactPoint(const btVector3& pointOnB,const btVector3& normalOnB,btScalar distance,int lifeTime,const btVector3& color)
 {
     drawLine(pointOnB,pointOnB+normalOnB*0.1,color);

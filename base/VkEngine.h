@@ -35,9 +35,12 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <string>
 #include <sstream>
 #include <array>
+#include <vector>
 #include <numeric>
 
 #include "vulkan/vulkan.h"
@@ -47,12 +50,18 @@
 #include "keycodes.hpp"
 
 #include "VulkanDevice.hpp"
+
+#include "resource.hpp"
+#include "VulkanBuffer.hpp"
+#include "shadingcontext.hpp"
+
 #include "VulkanSwapChain.hpp"
+
+
+
 
 const std::string getAssetPath();
 VkPipelineShaderStageCreateInfo loadShader(VkDevice device, std::string filename, VkShaderStageFlagBits stage);
-VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorBufferInfo* pDescBuffInfo);
-VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorImageInfo* pDescImgInfo);
 
 // AngelCode .fnt format structs and classes
 struct bmchar {
@@ -80,7 +89,7 @@ private:
     PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallback;
     PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallback;
     VkDebugReportCallbackEXT debugReportCallback;
-    MultisampleTarget multisampleTarget;
+    RenderTarget multisampleTarget;
 protected:
     VkInstance instance;
     VkPhysicalDevice physicalDevice;
@@ -89,10 +98,8 @@ protected:
     VkPhysicalDeviceMemoryProperties deviceMemoryProperties;
     VkDevice device;
     vks::VulkanDevice *vulkanDevice;
-    VkQueue queue;
+
     VkFormat depthFormat;
-    VkCommandPool cmdPool;
-    VkCommandBuffer drawCmdBuffer;
     VkRenderPass renderPass;
     VkFramebuffer frameBuffer;
     VkPipelineCache pipelineCache;
@@ -120,6 +127,29 @@ public:
     } settings;
 
     vks::Texture depthStencil;
+    struct UniformBuffers {
+        vks::Buffer matrices;
+        vks::Buffer params;
+    } sharedUBOs;
+
+    struct MVPMatrices {
+        glm::mat4 projection;
+        glm::mat4 view3;
+        glm::mat4 view;
+        glm::vec3 camPos;
+    } mvpMatrices;
+
+    struct LightingParams {
+        glm::vec4 lightDir = glm::vec4(0.0f, -0.5f, -0.5f, 1.0f);
+        float exposure = 4.5f;
+        float gamma = 1.0f;
+        float prefilteredCubeMipLevels;
+    } lightingParams;
+
+    glm::vec3 rotation = glm::vec3(0.0f, 135.0f, 0.0f);
+
+
+
 
     struct GamePadState {
         glm::vec2 axisLeft = glm::vec2(0.0f);
@@ -236,19 +266,22 @@ public:
     virtual void viewChanged();
     virtual void keyDown(uint32_t);
     virtual void keyUp(uint32_t);
-    virtual void keyPressed(uint32_t);
+    virtual void keyPressed(uint32_t key);
     virtual void handleMouseMove(int32_t x, int32_t y);
     virtual void handleMouseButtonDown(int buttonIndex);
     virtual void handleMouseButtonUp(int buttonIndex);
-    virtual void buildCommandBuffers();
-    virtual void rebuildCommandBuffers();
     virtual void setupFrameBuffer();
     virtual void prepare();
 
     void initSwapchain();
     void setupSwapChain();
-    void createCommandBuffers();
-    void destroyCommandBuffers();
+
+    void createRenderPass ();
+    void createRenderTarget ();
+
+    void prepareUniformBuffers();
+    void updateUniformBuffers();
+    void updateParams();
 
     void renderLoop();
     void prepareFrame();

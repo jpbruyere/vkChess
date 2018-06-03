@@ -14,10 +14,8 @@
 #include <vector>
 #include <map>
 
+#include <VkEngine.h>
 
-#include "vulkan/vulkan.h"
-#include "VulkanDevice.hpp"
-#include "texture.hpp"
 #include "../src/vkrenderer.h"
 
 #define GLM_FORCE_RADIANS
@@ -167,11 +165,9 @@ namespace vkglTF
             localNodeMatrix = parentMatrix * localNodeMatrix;
 
             // Parent node with children
-            if (node.children.size() > 0) {
-                for (auto i = 0; i < node.children.size(); i++) {
+            if (node.children.size() > 0)
+                for (uint i = 0; i < node.children.size(); i++)
                     loadNode(model.nodes[node.children[i]], localNodeMatrix, model, indexBuffer, vertexBuffer, globalscale);
-                }
-            }
 
             // Node contains mesh data
             if (node.mesh > -1) {
@@ -179,9 +175,9 @@ namespace vkglTF
 
                 for (size_t j = 0; j < mesh.primitives.size(); j++) {
                     const tinygltf::Primitive &primitive = mesh.primitives[j];
-                    if (primitive.indices < 0) {
+                    if (primitive.indices < 0)
                         continue;
-                    }
+
                     Primitive modPart;
 
                     modPart.indexBase = static_cast<uint32_t>(indexBuffer.size());
@@ -345,7 +341,7 @@ namespace vkglTF
             }
         }
 
-        void loadMaterials(tinygltf::Model &gltfModel, vks::VulkanDevice *device, VkQueue transferQueue)
+        void loadMaterials(tinygltf::Model &gltfModel)
         {
             for (tinygltf::Material &mat : gltfModel.materials) {
                 vkglTF::Material material = {};
@@ -398,7 +394,7 @@ namespace vkglTF
             }
         }
 
-        void loadFromFile(std::string filename, vks::VulkanDevice* _device, VkQueue transferQueue,
+        void loadFromFile(std::string filename, vks::VulkanDevice* _device,
                           bool instancedRendering = false, float scale = 1.0f, bool meshOnly = false)
         {
             device = _device;//should be set in CTOR
@@ -424,15 +420,15 @@ namespace vkglTF
 
             if (fileLoaded) {
                 if (!meshOnly) {
-                    loadImages(gltfModel, device, transferQueue, instancedRendering);
+                    loadImages(gltfModel, device, device->queue, instancedRendering);
                     if (instancedRendering){
-                        texArray = new vks::Texture(device, transferQueue, VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, textures, textureSize, textureSize);
+                        texArray = new vks::Texture(device, device->queue, VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, textures, textureSize, textureSize);
                         for (vks::Texture texture : textures){
                             texture.destroy();
                         }
                         textures.clear();
                     }
-                    loadMaterials(gltfModel, device, transferQueue);
+                    loadMaterials(gltfModel);
                     if (instancedRendering){
                         buildMaterialBuffer();
                         updateMaterialBuffer();
@@ -458,39 +454,27 @@ namespace vkglTF
             assert((vertexBufferSize > 0) && (indexBufferSize > 0));
 
             vks::Buffer vertexStaging, indexStaging;
-            // Create staging buffers
-            // Vertex data
-            VK_CHECK_RESULT(device->createBuffer(
+            vertexStaging.create (device,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                &vertexStaging,
-                vertexBufferSize,
-                vertexBuffer.data()));
-            // Index data
-            VK_CHECK_RESULT(device->createBuffer(
+                vertexBufferSize, vertexBuffer.data());
+            indexStaging.create (device,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                &indexStaging,
-                indexBufferSize,
-                indexBuffer.data()));
+                indexBufferSize, indexBuffer.data());
 
-            // Create device local buffers
-            // Vertex buffer
-            VK_CHECK_RESULT(device->createBuffer(
+            vertices.create (device,
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                &vertices,
-                vertexBufferSize));
-            // Index buffer
-            VK_CHECK_RESULT(device->createBuffer(
+                vertexBufferSize);
+            indices.create (device,
                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                &indices,
-                indexBufferSize));
+                indexBufferSize);
+
 
             // Copy from staging buffers
             VkCommandBuffer copyCmd = device->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
-
             VkBufferCopy copyRegion = {};
 
             copyRegion.size = vertexBufferSize;
@@ -499,7 +483,7 @@ namespace vkglTF
             copyRegion.size = indexBufferSize;
             vkCmdCopyBuffer(copyCmd, indexStaging.buffer, indices.buffer, 1, &copyRegion);
 
-            device->flushCommandBuffer(copyCmd, transferQueue, true);
+            device->flushCommandBuffer(copyCmd, device->queue, true);
 
             vertexStaging.destroy();
             indexStaging.destroy();
@@ -510,9 +494,8 @@ namespace vkglTF
             prepared = true;
         }
         void addOneInstanceOfEach () {
-            for (int i=0; i<primitives.size(); i++) {
+            for (uint i=0; i<primitives.size(); i++)
                 addInstance(i,glm::mat4(1));
-            }
         }
         uint32_t addInstance(uint32_t partIdx,const glm::mat4& modelMat, int materialIdx = -1){
             uint32_t idx = instances.size();
@@ -527,7 +510,7 @@ namespace vkglTF
             return idx;
         }
         uint32_t addInstance(const std::string& name, const glm::mat4& modelMat, int materialIdx = -1){
-            for (int i=0; i<primitives.size(); i++) {
+            for (uint i=0; i<primitives.size(); i++) {
                 if (name != primitives[i].name)
                     continue;
                 return addInstance(i,modelMat, materialIdx);
@@ -545,19 +528,14 @@ namespace vkglTF
             std::map<std::string, int>::iterator it = materialsNames.find(_name);
             return it == materialsNames.end() ? -1 : it->second;
         }
-        void allocateDescriptorSet (VkDescriptorPool descPool, VkDescriptorSetLayout dsLayout) {
-            VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-            descriptorSetAllocInfo.descriptorPool   = descPool;
-            descriptorSetAllocInfo.pSetLayouts      = &dsLayout;
-            descriptorSetAllocInfo.descriptorSetCount = 1;
-            VK_CHECK_RESULT(vkAllocateDescriptorSets(device->logicalDevice, &descriptorSetAllocInfo, &descriptorSet));
+        void allocateDescriptorSet (vks::ShadingContext* shadingCtx) {
+            descriptorSet = shadingCtx->allocateDescriptorSet(1);
 
-            std::array<VkWriteDescriptorSet, 2> writeDescriptorSets{
-                createWriteDS (descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &texArray->descriptor),
-                createWriteDS (descriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,         &materialsBuff.descriptor),
-            };
-
-            vkUpdateDescriptorSets(device->logicalDevice, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+            shadingCtx->updateDescriptorSet (descriptorSet,
+                {
+                    {1,0,texArray},
+                    {1,1,&materialsBuff}
+                });
         }
         void buildCommandBuffer(VkCommandBuffer cmdBuff, VkPipelineLayout pipelineLayout){
             if (!prepared)
@@ -604,11 +582,10 @@ namespace vkglTF
         }
 
         void buildMaterialBuffer () {
-            VK_CHECK_RESULT(device->createBuffer(
+            materialsBuff.create (device,
                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                &materialsBuff,
-                sizeof(Material)*16));
+                sizeof(Material)*16);
 
             VK_CHECK_RESULT(materialsBuff.map());
             updateMaterialBuffer();
@@ -619,13 +596,10 @@ namespace vkglTF
                 instancesBuff.destroy();
             }
 
-            instancesBuff.size = instanceDatas.size() * sizeof(InstanceData);
-
-            VK_CHECK_RESULT(device->createBuffer(
+            instancesBuff.create (device,
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                &instancesBuff,
-                instancesBuff.size));
+                instanceDatas.size() * sizeof(InstanceData));
 
             VK_CHECK_RESULT(instancesBuff.map());
             minDirty = 0;

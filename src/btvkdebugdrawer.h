@@ -19,6 +19,7 @@ protected:
 
 
     virtual void destroy();
+    virtual void configurePipelineLayout();
     virtual void prepareDescriptors();
     virtual void preparePipeline();
 
@@ -30,12 +31,14 @@ public:
     uint32_t			sdffVertexCount = 0;
 
 
-    btVKDebugDrawer(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
-                    VkFormat depthFormat, VkSampleCountFlagBits _sampleCount,
-                    std::vector<VkFramebuffer>&_frameBuffers, vks::Buffer* _uboMatrices,
-                    std::string fontFnt, vks::Texture &fontTexture);
+    btVKDebugDrawer();
 
     virtual ~btVKDebugDrawer();
+
+    virtual void create (vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
+                             VkFormat depthFormat, VkSampleCountFlagBits _sampleCount,
+                             std::vector<VkFramebuffer>&_frameBuffers, VulkanExampleBase::UniformBuffers& _sharedUbos,
+                             std::string fontFnt, vks::Texture& fontTexture);
 
     virtual void buildCommandBuffer ();
 

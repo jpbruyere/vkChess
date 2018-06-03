@@ -1,9 +1,8 @@
 #pragma once
 
 #include "VkEngine.h"
-#include "VulkanSwapChain.hpp"
 
-#define DRAW_FENCE_TIMEOUT 9900000
+#define DRAW_FENCE_TIMEOUT 99900000
 
 class vkRenderer
 {
@@ -17,7 +16,9 @@ protected:
     VulkanSwapChain*            swapChain;
     VkRenderPass                renderPass;
     std::vector<VkFramebuffer>  frameBuffers;
-    vks::Buffer*                uboMatrices;
+    VulkanExampleBase::UniformBuffers sharedUBOs;
+
+    vks::ShadingContext*        shadingCtx;
 
     VkCommandPool               commandPool;
     std::vector<VkCommandBuffer>cmdBuffers;
@@ -37,27 +38,30 @@ protected:
     vks::Buffer			vertexBuff;
     uint32_t			vBufferSize = 10000 * sizeof(float) * 6;
 
-
-    virtual void destroy();
+    virtual void prepare();
     virtual void prepareRenderPass();
     virtual void prepareFrameBuffer();
+    virtual void configurePipelineLayout();
+    virtual void loadRessources();
+    virtual void freeRessources();
     virtual void prepareDescriptors();
     virtual void preparePipeline();
 
 public:
-    VkDescriptorPool        descriptorPool;
-    VkDescriptorSetLayout   descriptorSetLayout;
-
     VkSemaphore         drawComplete;
     uint32_t			vertexCount = 0;
     uint32_t			sdffVertexCount = 0;
 
-    vkRenderer (vks::VulkanDevice* _device, VulkanSwapChain* _swapChain, VkFormat _depthFormat,
-                    VkSampleCountFlagBits _sampleCount, vks::Buffer *_uboMatrices);
+    vkRenderer ();
     virtual ~vkRenderer();
 
+    virtual void create (vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
+                                           VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
+                                           VulkanExampleBase::UniformBuffers& _sharedUbos);
+    virtual void destroy();
+
     virtual void buildCommandBuffer ();
-    virtual void prepare();
+    virtual void draw(VkCommandBuffer cmdBuff);
 
     void submit (VkQueue queue, VkSemaphore *waitSemaphore, uint32_t waitSemaphoreCount);
 

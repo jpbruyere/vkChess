@@ -1,20 +1,21 @@
 #include "vkrenderer.h"
+#include "pbrrenderer2.h"
 
 const VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-vkRenderer::vkRenderer (vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
-                       VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
-                       vks::Buffer* _uboMatrices)
-{
+vkRenderer::vkRenderer () {}
+
+void vkRenderer::create(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
+                   VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
+                   VulkanExampleBase::UniformBuffers& _sharedUbos) {
     swapChain   = _swapChain;
     device      = _device;
     depthFormat = _depthFormat;
     sampleCount = _sampleCount;
-    uboMatrices = _uboMatrices;
+    sharedUBOs = _sharedUbos;
 
     prepare();
 }
-
 vkRenderer::~vkRenderer()
 {
     if (prepared)
@@ -24,8 +25,7 @@ vkRenderer::~vkRenderer()
 void vkRenderer::destroy() {
     prepared = false;
 
-    vertexBuff.unmap();
-    vertexBuff.destroy();
+    freeRessources();
 
     for (uint32_t i = 0; i < frameBuffers.size(); i++)
         vkDestroyFramebuffer(device->logicalDevice, frameBuffers[i], nullptr);
@@ -37,51 +37,46 @@ void vkRenderer::destroy() {
 
     device->destroySemaphore(drawComplete);
 
+    delete shadingCtx;
+
     vkDestroyRenderPass     (device->logicalDevice, renderPass, VK_NULL_HANDLE);
     vkDestroyPipeline       (device->logicalDevice, pipeline, VK_NULL_HANDLE);
     vkDestroyPipelineLayout (device->logicalDevice, pipelineLayout, VK_NULL_HANDLE);
-    vkDestroyDescriptorSetLayout(device->logicalDevice, descriptorSetLayout, VK_NULL_HANDLE);
-    vkDestroyDescriptorPool (device->logicalDevice, descriptorPool, VK_NULL_HANDLE);
     vkDestroyCommandPool    (device->logicalDevice, commandPool, VK_NULL_HANDLE);
 }
 void vkRenderer::prepare() {
-    prepareRenderPass();
-
     fences.resize(swapChain->imageCount);
-    for (int i=0; i<swapChain->imageCount; i++)
+    for (uint i=0; i<swapChain->imageCount; i++)
         fences[i] = device->createFence(true);
 
     drawComplete= device->createSemaphore();
 
     submitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
-    submitInfo.pWaitDstStageMask = &stageFlags;
+    submitInfo.pWaitDstStageMask    = &stageFlags;
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pSignalSemaphores = &drawComplete;
+    submitInfo.commandBufferCount   = 1;
+    submitInfo.pSignalSemaphores    = &drawComplete;
+
+    prepareRenderPass();
 
     VkCommandPoolCreateInfo cmdPoolInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     cmdPoolInfo.queueFamilyIndex = device->queueFamilyIndices.graphics;
     cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     VK_CHECK_RESULT(vkCreateCommandPool(device->logicalDevice, &cmdPoolInfo, nullptr, &commandPool));
 
-    cmdBuffers.resize(swapChain->imageCount);
+    cmdBuffers.resize(frameBuffers.size());
 
     VkCommandBufferAllocateInfo cmdBufAllocateInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-    cmdBufAllocateInfo.commandPool = commandPool;
-    cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cmdBufAllocateInfo.commandBufferCount = swapChain->imageCount;
+    cmdBufAllocateInfo.commandPool          = commandPool;
+    cmdBufAllocateInfo.level                = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmdBufAllocateInfo.commandBufferCount   = frameBuffers.size();
     VK_CHECK_RESULT(vkAllocateCommandBuffers(device->logicalDevice, &cmdBufAllocateInfo, cmdBuffers.data()));
 
+    auto test = this;
+    test->configurePipelineLayout();
+    loadRessources();
     prepareDescriptors();
     preparePipeline ();
-
-    VK_CHECK_RESULT(device->createBuffer(
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &vertexBuff ,
-        vBufferSize));
-
-    vertexBuff.map();
 
     prepared = true;
 }
@@ -89,17 +84,17 @@ void vkRenderer::prepare() {
 void vkRenderer::prepareRenderPass()
 {
     VkAttachmentDescription attachments[] = {
-        {0, //ms
+        {0, //color
             swapChain->colorFormat, sampleCount,
-            VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
             VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        },{0,//ms depth
+        },{0,//depth
            depthFormat, sampleCount,
-           VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
+           VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
            VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-        },{0,//ms resolve
+        },{0,// resolve
            swapChain->colorFormat, VK_SAMPLE_COUNT_1_BIT,
            VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
            VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -115,37 +110,36 @@ void vkRenderer::prepareRenderPass()
     subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount    = 1;
     subpass.pColorAttachments       = &colorReference;
-    subpass.pResolveAttachments     = &resolveReference;
     subpass.pDepthStencilAttachment = &depthReference;
+    if (sampleCount > VK_SAMPLE_COUNT_1_BIT)
+        subpass.pResolveAttachments     = &resolveReference;
 
 
     VkSubpassDependency dependencies[] =
     {
-        { VK_SUBPASS_EXTERNAL, VK_SUBPASS_EXTERNAL,
-          VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
-          VK_DEPENDENCY_BY_REGION_BIT}
+//        { VK_SUBPASS_EXTERNAL, VK_SUBPASS_EXTERNAL,
+//          VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+//          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
+//          VK_DEPENDENCY_BY_REGION_BIT}
 
-//        { VK_SUBPASS_EXTERNAL, 0,
-//          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-//          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-//          VK_DEPENDENCY_BY_REGION_BIT},
-//        { 0, VK_SUBPASS_EXTERNAL,
-//          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-//          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
-//          VK_DEPENDENCY_BY_REGION_BIT},
+        { VK_SUBPASS_EXTERNAL, 0,
+          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+          VK_DEPENDENCY_BY_REGION_BIT},
+        { 0, VK_SUBPASS_EXTERNAL,
+          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
+          VK_DEPENDENCY_BY_REGION_BIT},
     };
 
     VkRenderPassCreateInfo renderPassCI = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-    renderPassCI.attachmentCount    = 3;
+    renderPassCI.attachmentCount    = sampleCount > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
     renderPassCI.pAttachments       = attachments;
     renderPassCI.subpassCount       = 1;
     renderPassCI.pSubpasses         = &subpass;
-    renderPassCI.dependencyCount    = 1;
+    renderPassCI.dependencyCount    = 2;
     renderPassCI.pDependencies      = dependencies;
     VK_CHECK_RESULT(vkCreateRenderPass(device->logicalDevice, &renderPassCI, nullptr, &renderPass));
-    if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
-    }
 
     prepareFrameBuffer();
 }
@@ -158,49 +152,45 @@ void vkRenderer::prepareFrameBuffer () {
 
     VkFramebufferCreateInfo frameBufferCI = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
     frameBufferCI.renderPass        = renderPass;
-    frameBufferCI.attachmentCount   = 3;
+    frameBufferCI.attachmentCount   = (sampleCount > VK_SAMPLE_COUNT_1_BIT) ? 3 : 2;
     frameBufferCI.pAttachments      = attachments;
     frameBufferCI.width             = swapChain->extent.width;
     frameBufferCI.height            = swapChain->extent.height;
     frameBufferCI.layers            = 1;
 
     frameBuffers.resize(swapChain->imageCount);
+
     for (uint32_t i = 0; i < frameBuffers.size(); i++) {
         attachments[2] = swapChain->buffers[i].view;
         VK_CHECK_RESULT(vkCreateFramebuffer(device->logicalDevice, &frameBufferCI, nullptr, &frameBuffers[i]));
     }
 }
+
+void vkRenderer::configurePipelineLayout () {
+    shadingCtx = new vks::ShadingContext (device);
+
+    shadingCtx->addDescriptorSetLayout({{ 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr }});
+
+    shadingCtx->prepare();
+
+}
+void vkRenderer::loadRessources() {
+    vertexBuff.create (device,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        vBufferSize);
+
+    vertexBuff.map();
+}
+void vkRenderer::freeRessources() {
+    vertexBuff.unmap();
+    vertexBuff.destroy();
+}
 void vkRenderer::prepareDescriptors()
 {
-    std::vector<VkDescriptorPoolSize> poolSizes = {
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 },
-    };
-    VkDescriptorPoolCreateInfo descriptorPoolCI = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-    descriptorPoolCI.poolSizeCount = 1;
-    descriptorPoolCI.pPoolSizes = poolSizes.data();
-    descriptorPoolCI.maxSets = 2;
-    VK_CHECK_RESULT(vkCreateDescriptorPool(device->logicalDevice, &descriptorPoolCI, nullptr, &descriptorPool));
+    descriptorSet = shadingCtx->allocateDescriptorSet(0);
 
-    // Descriptor set layout
-    std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
-        { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr },
-    };
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    descriptorSetLayoutCI.pBindings = setLayoutBindings.data();
-    descriptorSetLayoutCI.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device->logicalDevice, &descriptorSetLayoutCI, nullptr, &descriptorSetLayout));
-
-    VkDescriptorSetAllocateInfo descriptorSetAllocInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
-    descriptorSetAllocInfo.descriptorPool = descriptorPool;
-    descriptorSetAllocInfo.pSetLayouts = &descriptorSetLayout;
-    descriptorSetAllocInfo.descriptorSetCount = 1;
-    VK_CHECK_RESULT(vkAllocateDescriptorSets(device->logicalDevice, &descriptorSetAllocInfo, &descriptorSet));
-
-    VkWriteDescriptorSet writeDescriptorSets =
-        createWriteDS (descriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uboMatrices->descriptor);
-
-    vkUpdateDescriptorSets(device->logicalDevice, 1, &writeDescriptorSets, 0, NULL);
-
+    shadingCtx->updateDescriptorSet (descriptorSet,{{0,0,&sharedUBOs.matrices}});
 }
 void vkRenderer::preparePipeline()
 {
@@ -252,8 +242,8 @@ void vkRenderer::preparePipeline()
     dynamicStateCI.dynamicStateCount = static_cast<uint32_t>(dynamicStateEnables.size());
 
     VkPipelineLayoutCreateInfo pipelineLayoutCI = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-    pipelineLayoutCI.setLayoutCount = 1;
-    pipelineLayoutCI.pSetLayouts = &descriptorSetLayout;
+    pipelineLayoutCI.setLayoutCount = shadingCtx->layouts.size();
+    pipelineLayoutCI.pSetLayouts    = shadingCtx->layouts.data();
     VK_CHECK_RESULT(vkCreatePipelineLayout(device->logicalDevice, &pipelineLayoutCI, nullptr, &pipelineLayout));
 
     // Vertex bindings an attributes
@@ -297,11 +287,15 @@ void vkRenderer::preparePipeline()
     for (auto shaderStage : shaderStages)
         vkDestroyShaderModule(device->logicalDevice, shaderStage.module, nullptr);
 }
-void vkRenderer::buildCommandBuffer (){
-    if (vertexCount == 0) {
-        return;
-    }
+void vkRenderer::draw(VkCommandBuffer cmdBuff) {
+    VkDeviceSize offsets[1] = { 0 };
 
+    vkCmdBindPipeline (cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    vkCmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, NULL);
+    vkCmdBindVertexBuffers (cmdBuff, 0, 1, &vertexBuff.buffer, offsets);
+    vkCmdDraw (cmdBuff,  vertexCount, 1, 0, 0);
+}
+void vkRenderer::buildCommandBuffer (){
     prepared = false;
 
     VkCommandBufferBeginInfo cmdBufInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -338,13 +332,7 @@ void vkRenderer::buildCommandBuffer (){
         scissor.extent = { swapChain->extent.width, swapChain->extent.height};
         vkCmdSetScissor(cmdBuffers[i], 0, 1, &scissor);
 
-        VkDeviceSize offsets[1] = { 0 };
-
-        vkCmdBindPipeline (cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-        vkCmdBindDescriptorSets(cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, NULL);
-        vkCmdBindVertexBuffers (cmdBuffers[i], 0, 1, &vertexBuff.buffer, offsets);
-        vkCmdDraw (cmdBuffers[i],  vertexCount, 1, 0, 0);
-
+        draw (cmdBuffers[i]);
         vkCmdEndRenderPass(cmdBuffers[i]);
 
         VK_CHECK_RESULT(vkEndCommandBuffer(cmdBuffers[i]));
@@ -353,7 +341,7 @@ void vkRenderer::buildCommandBuffer (){
 }
 
 void vkRenderer::submit (VkQueue queue, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount) {
-    if (!prepared || vertexCount == 0)
+    if (!prepared)
         return;
     submitInfo.pCommandBuffers		= &cmdBuffers[swapChain->currentBuffer];
     submitInfo.waitSemaphoreCount	= waitSemaphoreCount;

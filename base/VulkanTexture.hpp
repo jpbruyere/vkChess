@@ -174,7 +174,6 @@ namespace vks
             std::string filename,
             VkFormat format,
             vks::VulkanDevice *_device,
-            VkQueue copyQueue,
             VkImageUsageFlags imageUsageFlags = VK_IMAGE_USAGE_SAMPLED_BIT,
             VkImageLayout _imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
         {
@@ -209,9 +208,10 @@ namespace vks
             imageLayout = _imageLayout;
 
             vks::Buffer stagingBuffer;
-            device->createBuffer (VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                  &stagingBuffer, texCube.size(), texCube.data());
+            stagingBuffer.create (device,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                texCube.size(), texCube.data());
 
             descriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -250,7 +250,7 @@ namespace vks
                            subresourceRange,
                            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
-            device->flushCommandBuffer(copyCmd, copyQueue, true);
+            device->flushCommandBuffer(copyCmd, device->queue, true);
             stagingBuffer.destroy();
 
             createView(VK_IMAGE_VIEW_TYPE_CUBE, VK_IMAGE_ASPECT_COLOR_BIT,infos.mipLevels,6);

@@ -5,12 +5,10 @@
 
 namespace vks
 {
-    struct Texture {
-        vks::VulkanDevice*  device;
+    struct Texture : public Resource {
         VkImage             image       = VK_NULL_HANDLE;
         VkImageView         view        = VK_NULL_HANDLE;
         VkSampler           sampler     = VK_NULL_HANDLE;
-        VkDeviceMemory      deviceMemory= VK_NULL_HANDLE;
 
         VkImageCreateInfo   infos       = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
         VkImageLayout       imageLayout;
@@ -42,7 +40,7 @@ namespace vks
 
             VkMemoryAllocateInfo memAllocInfo{};
             memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-            VkMemoryRequirements memReqs{};
+
             VK_CHECK_RESULT(vkCreateImage(device->logicalDevice, &infos, nullptr, &image));
             vkGetImageMemoryRequirements(device->logicalDevice, image, &memReqs);
             memAllocInfo.allocationSize = memReqs.size;
@@ -79,16 +77,16 @@ namespace vks
             VkCommandBuffer blitCmd = device->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
 
             //imageLayout = _imageLayout;
-            for (int l = 0; l < texArray.size(); l++) {
+            for (uint l = 0; l < texArray.size(); l++) {
                 Texture* inTex = &texArray[l];
 
                 VkImageBlit firstMipBlit{};
 
                 firstMipBlit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-                firstMipBlit.srcOffsets[1] = {inTex->infos.extent.width,inTex->infos.extent.height,1};
+                firstMipBlit.srcOffsets[1] = {(int32_t)inTex->infos.extent.width,(int32_t)inTex->infos.extent.height,1};
 
                 firstMipBlit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, l, 1};
-                firstMipBlit.dstOffsets[1] = {infos.extent.width,infos.extent.height,1};
+                firstMipBlit.dstOffsets[1] = {(int32_t)infos.extent.width,(int32_t)infos.extent.height,1};
 
                 VkImageSubresourceRange mipSubRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, l, 1};
 
@@ -126,6 +124,16 @@ namespace vks
         {
             descriptor.sampler = sampler;
             descriptor.imageView = view;
+        }
+
+        virtual VkWriteDescriptorSet getWriteDescriptorSet (VkDescriptorSet ds, uint32_t binding, VkDescriptorType descriptorType) {
+            VkWriteDescriptorSet wds = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+            wds.dstSet = ds;
+            wds.descriptorType = descriptorType;
+            wds.dstBinding = binding;
+            wds.descriptorCount = 1;
+            wds.pImageInfo = &descriptor;
+            return wds;
         }
 
         /** @brief Release all Vulkan resources held by this texture */
@@ -274,10 +282,10 @@ namespace vks
         }
 
         void copyTo (VkQueue copyQueue, unsigned char* buffer, VkDeviceSize bufferSize) {
-            vks::Buffer stagingBuffer;
-            device->createBuffer (VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            Buffer stagingBuffer;
+            stagingBuffer.create (device, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                  &stagingBuffer, bufferSize, buffer);
+                                  bufferSize, buffer);
 
             descriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 

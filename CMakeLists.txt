@@ -98,10 +98,10 @@ add_definitions(-std=c++11 -g)
 find_package (Bullet REQUIRED)
 
 if(RESOURCE_INSTALL_DIR)
-	add_definitions(-DVK_EXAMPLE_DATA_DIR=\"${RESOURCE_INSTALL_DIR}/\")
+	add_definitions(-DDATA_DIR=\"${RESOURCE_INSTALL_DIR}/\")
 	install(DIRECTORY data/ DESTINATION ${RESOURCE_INSTALL_DIR}/)
 else()
-	add_definitions(-DVK_EXAMPLE_DATA_DIR=\"${CMAKE_SOURCE_DIR}/data/\")
+	add_definitions(-DDATA_DIR=\"${CMAKE_SOURCE_DIR}/data/\")
 endif()
 
 # Compiler specific stuff

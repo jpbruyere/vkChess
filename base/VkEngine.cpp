@@ -6,8 +6,14 @@
 * This code is licensed under the MIT license (MIT) (http://opensource.org/licenses/MIT)
 */
 
+
 #include "VkEngine.h"
 #include <fstream>
+
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#include "tiny_gltf.h"
+
 
 #if !(defined(VK_USE_PLATFORM_IOS_MVK) || defined(VK_USE_PLATFORM_MACOS_MVK))
 const std::string getAssetPath()
@@ -138,27 +144,6 @@ std::array<bmchar, 255> parsebmFont(const std::string& fileName)
     return fontChars;
 }
 
-VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorBufferInfo* pDescBuffInfo)
-{
-    VkWriteDescriptorSet wds = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-    wds.dstSet = dstSet;
-    wds.descriptorType = descriptorType;
-    wds.dstBinding = dstBinding;
-    wds.descriptorCount = 1;
-    wds.pBufferInfo = pDescBuffInfo;
-    return wds;
-}
-VkWriteDescriptorSet createWriteDS (VkDescriptorSet dstSet, VkDescriptorType descriptorType, uint32_t dstBinding, const VkDescriptorImageInfo* pDescImgInfo)
-{
-    VkWriteDescriptorSet wds = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-    wds.dstSet = dstSet;
-    wds.descriptorType = descriptorType;
-    wds.dstBinding = dstBinding;
-    wds.descriptorCount = 1;
-    wds.pImageInfo = pDescImgInfo;
-    return wds;
-}
-
 std::vector<const char*> VulkanExampleBase::args;
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debugMessageCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objType, uint64_t srcObject, size_t location, int32_t msgCode, const char * pLayerPrefix, const char * pMsg, void * pUserData)
@@ -254,37 +239,8 @@ std::string VulkanExampleBase::getWindowTitle()
     return windowTitle;
 }
 
-void VulkanExampleBase::createCommandBuffers()
-{
-    VkCommandBufferAllocateInfo cmdBufAllocateInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-    cmdBufAllocateInfo.commandPool = cmdPool;
-    cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cmdBufAllocateInfo.commandBufferCount = 1;
-    VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &drawCmdBuffer));
-}
 
-void VulkanExampleBase::destroyCommandBuffers()
-{
-    vkFreeCommandBuffers(device, cmdPool, 1, &drawCmdBuffer);
-}
-
-void VulkanExampleBase::prepare()
-{
-    /*
-        Swapchain
-    */
-    initSwapchain();
-    setupSwapChain();
-
-    presentCompleteSemaphore = vulkanDevice->createSemaphore();
-
-    VkCommandPoolCreateInfo cmdPoolInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
-    cmdPoolInfo.queueFamilyIndex = swapChain.queueNodeIndex;
-    cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    VK_CHECK_RESULT(vkCreateCommandPool(device, &cmdPoolInfo, nullptr, &cmdPool));
-
-    createCommandBuffers();
-
+void VulkanExampleBase::createRenderPass () {
     std::array<VkAttachmentDescription, 2> attachments = {};
 
     // Multisampled attachment that we render to
@@ -342,16 +298,27 @@ void VulkanExampleBase::prepare()
     renderPassCI.dependencyCount = 2;
     renderPassCI.pDependencies = dependencies.data();
     VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassCI, nullptr, &renderPass));
+}
 
+void VulkanExampleBase::prepare()
+{
+    initSwapchain();
+    setupSwapChain();
 
+    presentCompleteSemaphore = vulkanDevice->createSemaphore();
 
     VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
     VK_CHECK_RESULT(vkCreatePipelineCache(device, &pipelineCacheCreateInfo, nullptr, &pipelineCache));
 
-    setupFrameBuffer();
+    createRenderTarget();
+
+    //setupFrameBuffer();
 
     swapChain.multisampleTarget = &multisampleTarget;
     swapChain.depthStencil = &depthStencil;
+
+    prepareUniformBuffers();
+    prepared = true;
 }
 
 void VulkanExampleBase::renderFrame()
@@ -661,13 +628,15 @@ VulkanExampleBase::VulkanExampleBase()
 
 VulkanExampleBase::~VulkanExampleBase()
 {
+    sharedUBOs.matrices.destroy();
+    sharedUBOs.params.destroy();
+
     // Clean up Vulkan resources
     swapChain.cleanup();
-    destroyCommandBuffers();
+
     vkDestroyRenderPass     (device, renderPass, nullptr);
     vkDestroyFramebuffer    (device, frameBuffer, nullptr);
     vkDestroyPipelineCache  (device, pipelineCache, nullptr);
-    vkDestroyCommandPool    (device, cmdPool, nullptr);
 
     vulkanDevice->destroySemaphore(presentCompleteSemaphore);
 
@@ -785,11 +754,6 @@ void VulkanExampleBase::initVulkan()
         exit(res);
     }
     device = vulkanDevice->logicalDevice;
-
-    /*
-        Graphics queue
-    */
-    vkGetDeviceQueue(device, vulkanDevice->queueFamilyIndices.graphics, 0, &queue);
 
     /*
         Suitable depth format
@@ -1709,16 +1673,88 @@ void VulkanExampleBase::handleEvent(const xcb_generic_event_t *event)
 }
 #endif
 
-void VulkanExampleBase::viewChanged() {}
+void VulkanExampleBase::viewChanged() {
+    updateUniformBuffers();
+}
+
+void VulkanExampleBase::prepareUniformBuffers()
+{
+    // Objact vertex shader uniform buffer
+    sharedUBOs.matrices.create(vulkanDevice,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        sizeof(mvpMatrices));
+
+    // Shared parameter uniform buffer
+    sharedUBOs.params.create(vulkanDevice,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        sizeof(lightingParams));
+
+    // Map persistent
+    sharedUBOs.matrices.map();
+    sharedUBOs.params.map();
+
+    updateUniformBuffers();
+    updateParams();
+}
+
+void VulkanExampleBase::updateUniformBuffers()
+{
+    // 3D object
+    mvpMatrices.projection = camera.matrices.perspective;
+    mvpMatrices.view = camera.matrices.view;
+    mvpMatrices.view3 = glm::mat4(glm::mat3(camera.matrices.view));
+    mvpMatrices.camPos = camera.position * -1.0f;
+    sharedUBOs.matrices.copyTo (&mvpMatrices, sizeof(mvpMatrices));
+}
+
+void VulkanExampleBase::updateParams()
+{
+    lightingParams.lightDir = glm::vec4(-10.0f, 150.f, -10.f, 1.0f);
+    sharedUBOs.params.copyTo(&lightingParams, sizeof(lightingParams));
+}
+
 
 void VulkanExampleBase::keyDown(uint32_t) {}
 void VulkanExampleBase::keyUp(uint32_t) {}
-void VulkanExampleBase::keyPressed(uint32_t) {}
+void VulkanExampleBase::keyPressed(uint32_t key) {
+#if !defined(VK_USE_PLATFORM_ANDROID_KHR)
+    switch (key) {
+    case KEY_F1:
+        if (lightingParams.exposure > 0.1f) {
+            lightingParams.exposure -= 0.1f;
+            updateParams();
+            std::cout << "Exposure: " << lightingParams.exposure << std::endl;
+        }
+        break;
+    case KEY_F2:
+        if (lightingParams.exposure < 10.0f) {
+            lightingParams.exposure += 0.1f;
+            updateParams();
+            std::cout << "Exposure: " << lightingParams.exposure << std::endl;
+        }
+        break;
+    case KEY_F3:
+        if (lightingParams.gamma > 0.1f) {
+            lightingParams.gamma -= 0.1f;
+            updateParams();
+            std::cout << "Gamma: " << lightingParams.gamma << std::endl;
+        }
+        break;
+    case KEY_F4:
+        if (lightingParams.gamma < 10.0f) {
+            lightingParams.gamma += 0.1f;
+            updateParams();
+            std::cout << "Gamma: " << lightingParams.gamma << std::endl;
+        }
+        break;
+    }
+#endif
+}
 
-void VulkanExampleBase::buildCommandBuffers() {}
 
-void VulkanExampleBase::setupFrameBuffer()
-{
+void VulkanExampleBase::createRenderTarget () {
     if (settings.multiSampling) {
 
         multisampleTarget.color.create (vulkanDevice,
@@ -1736,13 +1772,14 @@ void VulkanExampleBase::setupFrameBuffer()
         multisampleTarget.depth.createView(VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT);
     }
 
-    // Depth/Stencil attachment is the same for all frame buffers
     depthStencil.create (vulkanDevice,
                                     VK_IMAGE_TYPE_2D, depthFormat, width, height,
                                     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
     depthStencil.createView(VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT);
+}
 
-
+void VulkanExampleBase::setupFrameBuffer()
+{
     VkImageView attachments[] = {
         multisampleTarget.color.view,
         multisampleTarget.depth.view
@@ -1758,17 +1795,7 @@ void VulkanExampleBase::setupFrameBuffer()
     VK_CHECK_RESULT(vkCreateFramebuffer(device, &frameBufferCI, nullptr, &frameBuffer));
 }
 
-void VulkanExampleBase::rebuildCommandBuffers() {
-    prepared = false;
 
-    vkDeviceWaitIdle(device);
-
-    destroyCommandBuffers();
-    createCommandBuffers();
-    buildCommandBuffers();
-
-    prepared = true;
-}
 void VulkanExampleBase::windowResize()
 {
     if (!prepared) {
@@ -1780,13 +1807,16 @@ void VulkanExampleBase::windowResize()
     width = destWidth;
     height = destHeight;
     setupSwapChain();
+
     depthStencil.destroy();
+    if (settings.multiSampling) {
+        multisampleTarget.color.destroy();
+        multisampleTarget.depth.destroy();
+    }
     vkDestroyFramebuffer(device, frameBuffer, nullptr);
 
     setupFrameBuffer();
-    destroyCommandBuffers();
-    createCommandBuffers();
-    buildCommandBuffers();
+
     vkDeviceWaitIdle(device);
 
     camera.updateAspectRatio((float)width / (float)height);
