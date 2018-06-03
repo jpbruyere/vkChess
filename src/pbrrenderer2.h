@@ -5,7 +5,7 @@
 #include "VulkanTexture.hpp"
 #include "VulkanglTFModel.hpp"
 
-class pbrRenderer2 : public vkRenderer
+class pbrRenderer : public vkRenderer
 {
     void generateBRDFLUT();
     void generateCubemaps();
@@ -34,8 +34,8 @@ public:
     vkglTF::Model               skybox;
     std::vector<vkglTF::Model>  models;
 
-    pbrRenderer2 ();
-    virtual ~pbrRenderer2();
+    pbrRenderer ();
+    virtual ~pbrRenderer();
 
     virtual void create(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
                         VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,

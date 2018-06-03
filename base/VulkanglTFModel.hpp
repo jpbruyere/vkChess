@@ -105,34 +105,34 @@ namespace vkglTF
 
         //vertices list are kept for meshLoading only (usefull for bullet lowpoly meshes without texture or material
         //their are cleared for normal loading
-        std::vector<uint32_t>       indexBuffer;
-        std::vector<Vertex>         vertexBuffer;
+        std::vector<uint32_t>       indices;
+        std::vector<Vertex>         vertices;
         std::vector<vks::Texture>   textures;
         std::vector<Material>       materials;
         std::map<std::string, int>  materialsNames;
-        std::vector<uint32_t>       instances;
+        std::vector<uint32_t>       instances;//TODO:should store part idx and count
         std::vector<InstanceData>   instanceDatas;
 
-        vks::Buffer     vertices;
-        vks::Buffer     indices;
-        vks::Buffer     instancesBuff;
-        vks::Buffer     materialsBuff;
+        vks::Buffer     vbo;
+        vks::Buffer     ibo;
+        vks::Buffer     vboInstances;
+        vks::Buffer     uboMaterials;
 
-        vks::Texture*   texArray        = NULL;
-        VkDescriptorSet descriptorSet   = VK_NULL_HANDLE;
+        vks::Texture*   texAtlas        = NULL;//array of all textuures used by model
+        VkDescriptorSet descriptorSet   = VK_NULL_HANDLE;//atlas sampler and materials ubo, defined by pbr renderer
 
         std::vector<Primitive> primitives;
 
         void destroy()
         {
             prepared = false;
-            vertices.destroy();
-            indices.destroy();
-            instancesBuff.destroy();
-            materialsBuff.destroy();
-            if (texArray) {
-                texArray->destroy();
-                delete (texArray);
+            vbo.destroy();
+            ibo.destroy();
+            vboInstances.destroy();
+            uboMaterials.destroy();
+            if (texAtlas) {
+                texAtlas->destroy();
+                delete (texAtlas);
             }
 
             for (vks::Texture texture : textures)
@@ -422,7 +422,7 @@ namespace vkglTF
                 if (!meshOnly) {
                     loadImages(gltfModel, device, device->queue, instancedRendering);
                     if (instancedRendering){
-                        texArray = new vks::Texture(device, device->queue, VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, textures, textureSize, textureSize);
+                        texAtlas = new vks::Texture(device, device->queue, VK_IMAGE_TYPE_2D, VK_FORMAT_R8G8B8A8_UNORM, textures, textureSize, textureSize);
                         for (vks::Texture texture : textures){
                             texture.destroy();
                         }
@@ -437,7 +437,7 @@ namespace vkglTF
                 const tinygltf::Scene &scene = gltfModel.scenes[gltfModel.defaultScene];
                 for (size_t i = 0; i < scene.nodes.size(); i++) {
                     const tinygltf::Node node = gltfModel.nodes[scene.nodes[i]];
-                    loadNode(node, glm::mat4(1.0f), gltfModel, indexBuffer, vertexBuffer, scale);
+                    loadNode(node, glm::mat4(1.0f), gltfModel, indices, vertices, scale);
                 }
                 if (meshOnly)
                     return;
@@ -448,8 +448,8 @@ namespace vkglTF
                 exit(-1);
             }
 
-            size_t vertexBufferSize = vertexBuffer.size() * sizeof(Vertex);
-            size_t indexBufferSize = indexBuffer.size() * sizeof(uint32_t);
+            size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
+            size_t indexBufferSize = indices.size() * sizeof(uint32_t);
 
             assert((vertexBufferSize > 0) && (indexBufferSize > 0));
 
@@ -457,17 +457,17 @@ namespace vkglTF
             vertexStaging.create (device,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                vertexBufferSize, vertexBuffer.data());
+                vertexBufferSize, vertices.data());
             indexStaging.create (device,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                indexBufferSize, indexBuffer.data());
+                indexBufferSize, indices.data());
 
-            vertices.create (device,
+            vbo.create (device,
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 vertexBufferSize);
-            indices.create (device,
+            ibo.create (device,
                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                 indexBufferSize);
@@ -478,18 +478,18 @@ namespace vkglTF
             VkBufferCopy copyRegion = {};
 
             copyRegion.size = vertexBufferSize;
-            vkCmdCopyBuffer(copyCmd, vertexStaging.buffer, vertices.buffer, 1, &copyRegion);
+            vkCmdCopyBuffer(copyCmd, vertexStaging.buffer, vbo.buffer, 1, &copyRegion);
 
             copyRegion.size = indexBufferSize;
-            vkCmdCopyBuffer(copyCmd, indexStaging.buffer, indices.buffer, 1, &copyRegion);
+            vkCmdCopyBuffer(copyCmd, indexStaging.buffer, ibo.buffer, 1, &copyRegion);
 
             device->flushCommandBuffer(copyCmd, device->queue, true);
 
             vertexStaging.destroy();
             indexStaging.destroy();
 
-            vertexBuffer.clear();
-            indexBuffer.clear();
+            vertices.clear();
+            indices.clear();
 
             prepared = true;
         }
@@ -533,8 +533,8 @@ namespace vkglTF
 
             shadingCtx->updateDescriptorSet (descriptorSet,
                 {
-                    {1,0,texArray},
-                    {1,1,&materialsBuff}
+                    {1,0,texAtlas},
+                    {1,1,&uboMaterials}
                 });
         }
         void buildCommandBuffer(VkCommandBuffer cmdBuff, VkPipelineLayout pipelineLayout){
@@ -545,8 +545,8 @@ namespace vkglTF
             if (descriptorSet)
                 vkCmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &descriptorSet, 0, NULL);
 
-            vkCmdBindVertexBuffers(cmdBuff, 0, 1, &vertices.buffer, offsets);
-            vkCmdBindIndexBuffer(cmdBuff, indices.buffer, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdBindVertexBuffers(cmdBuff, 0, 1, &vbo.buffer, offsets);
+            vkCmdBindIndexBuffer(cmdBuff, ibo.buffer, 0, VK_INDEX_TYPE_UINT32);
 
             if (instances.empty()) {
                 for (auto primitive : primitives)
@@ -555,13 +555,13 @@ namespace vkglTF
             }
 
             //instance buffer
-            vkCmdBindVertexBuffers(cmdBuff, 1, 1, &instancesBuff.buffer, offsets);
+            vkCmdBindVertexBuffers(cmdBuff, 1, 1, &vboInstances.buffer, offsets);
 
             uint32_t partIdx = instances[0];
             uint32_t instCount = 0;
             uint32_t instOffset = 0;
 
-            for (int i = 0; i < instances.size(); i++){
+            for (uint i = 0; i < instances.size(); i++){
                 if (partIdx != instances[i]) {
                     vkCmdDrawIndexed(cmdBuff,	primitives[partIdx].indexCount, instCount,
                                                 primitives[partIdx].indexBase,
@@ -582,26 +582,26 @@ namespace vkglTF
         }
 
         void buildMaterialBuffer () {
-            materialsBuff.create (device,
+            uboMaterials.create (device,
                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 sizeof(Material)*16);
 
-            VK_CHECK_RESULT(materialsBuff.map());
+            VK_CHECK_RESULT(uboMaterials.map());
             updateMaterialBuffer();
         }
         void buildInstanceBuffer (){
-            if (instancesBuff.size > 0){
+            if (vboInstances.size > 0){
                 vkDeviceWaitIdle(device->dev);
-                instancesBuff.destroy();
+                vboInstances.destroy();
             }
 
-            instancesBuff.create (device,
+            vboInstances.create (device,
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                 instanceDatas.size() * sizeof(InstanceData));
 
-            VK_CHECK_RESULT(instancesBuff.map());
+            VK_CHECK_RESULT(vboInstances.map());
             minDirty = 0;
             maxDirty = instanceDatas.size()-1;
             updateInstancesBuffer();
@@ -620,7 +620,7 @@ namespace vkglTF
             long count = maxDirty - minDirty + 1;
             if (count > 0) {
                 size_t offset = minDirty * sizeof(InstanceData);
-                memcpy((char*)instancesBuff.mapped + offset,
+                memcpy((char*)vboInstances.mapped + offset,
                        (char*)instanceDatas.data() + offset, count * sizeof(InstanceData));
 
             }
@@ -628,19 +628,19 @@ namespace vkglTF
             maxDirty = 0;
         }
         void updateMaterialBuffer(){
-            memcpy(materialsBuff.mapped, materials.data(), sizeof(Material)*materials.size());
+            memcpy(uboMaterials.mapped, materials.data(), sizeof(Material)*materials.size());
         }
         void disableEmissive (uint32_t matIdx) {
             VkDeviceSize offset = matIdx * sizeof(Material) + 48;
-            uint32_t* emissive = (uint32_t*)(materialsBuff.mapped + offset);
+            uint32_t* emissive = (uint32_t*)(uboMaterials.mapped + offset);
             *emissive = 0;
-            materialsBuff.flush(4, offset);
+            uboMaterials.flush(4, offset);
         }
         void enableEmissive (uint32_t matIdx) {
             VkDeviceSize offset = matIdx * sizeof(Material) + 48;
-            uint32_t* emissive = (uint32_t*)(materialsBuff.mapped + offset);
+            uint32_t* emissive = (uint32_t*)(uboMaterials.mapped + offset);
             *emissive = materials[matIdx].emissiveTexture;
-            materialsBuff.flush(4, offset);
+            uboMaterials.flush(4, offset);
         }
     };
 }

@@ -119,6 +119,17 @@ namespace vks
             }
         }
 
+        VkFormat getSuitableDepthFormat () {
+            std::vector<VkFormat> depthFormats = { VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D16_UNORM_S8_UINT, VK_FORMAT_D16_UNORM };
+            for (auto& format : depthFormats) {
+                VkFormatProperties formatProps;
+                vkGetPhysicalDeviceFormatProperties(phy, format, &formatProps);
+                if (formatProps.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+                    return format;
+            }
+            std::cerr << "No suitable depth format found" << std::endl;
+            exit(-1);
+        }
 
         uint32_t getQueueFamilyIndex(VkQueueFlagBits queueFlags)
         {

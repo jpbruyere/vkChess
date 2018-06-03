@@ -9,10 +9,13 @@ namespace vks {
         Resource* pResource;
     };
 
+    //should be thread safe with dedicate desc and cmd pools
     class ShadingContext
     {
         vks::VulkanDevice*					device;
         VkDescriptorPool					descriptorPool;
+        VkCommandPool                       cmdPool;
+
 
         std::vector<std::vector<VkDescriptorSetLayoutBinding>> descriptorSetLayoutBindings;
 

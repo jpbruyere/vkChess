@@ -69,7 +69,7 @@ public:
     };
 
     vkRenderer*     debugRenderer = nullptr;
-    pbrRenderer2*   sceneRenderer = nullptr;
+    pbrRenderer*   sceneRenderer = nullptr;
 
 
     VkEngine() : VulkanExampleBase()
@@ -1000,7 +1000,7 @@ public:
     }
 
     virtual void prepareRenderers() {
-        sceneRenderer = new pbrRenderer2();
+        sceneRenderer = new pbrRenderer();
         sceneRenderer->create(vulkanDevice, &swapChain, depthFormat, settings.sampleCount, sharedUBOs);
 
         sceneRenderer->models.resize(1);
@@ -1087,70 +1087,7 @@ public:
 
 VkEngine *vulkanExample;
 
-// OS specific macros for the example main entry points
-#if defined(_WIN32)
-LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    if (vulkanExample != NULL)
-    {
-        vulkanExample->handleMessages(hWnd, uMsg, wParam, lParam);
-    }
-    return (DefWindowProc(hWnd, uMsg, wParam, lParam));
-}
-int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int)
-{
-    for (int32_t i = 0; i < __argc; i++) { VulkanExample::args.push_back(__argv[i]); };
-    vulkanExample = new VulkanExample();
-    vulkanExample->initVulkan();
-    vulkanExample->setupWindow(hInstance, WndProc);
-    vulkanExample->prepare();
-    vulkanExample->renderLoop();
-    delete(vulkanExample);
-    return 0;
-}
-#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-// Android entry point
-// A note on app_dummy(): This is required as the compiler may otherwise remove the main entry point of the application
-void android_main(android_app* state)
-{
-    app_dummy();
-    vulkanExample = new VulkanExample();
-    state->userData = vulkanExample;
-    state->onAppCmd = VulkanExample::handleAppCommand;
-    state->onInputEvent = VulkanExample::handleAppInput;
-    androidApp = state;
-    vks::android::getDeviceConfig();
-    vulkanExample->renderLoop();
-    delete(vulkanExample);
-}
-#elif defined(_DIRECT2DISPLAY)
-// Linux entry point with direct to display wsi
-static void handleEvent()
-{
-}
-int main(const int argc, const char *argv[])
-{
-    for (size_t i = 0; i < argc; i++) { VulkanExample::args.push_back(argv[i]); };
-    vulkanExample = new VulkanExample();
-    vulkanExample->initVulkan();
-    vulkanExample->prepare();
-    vulkanExample->renderLoop();
-    delete(vulkanExample);
-    return 0;
-}
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
-int main(const int argc, const char *argv[])
-{
-    for (size_t i = 0; i < argc; i++) { VulkanExample::args.push_back(argv[i]); };
-    vulkanExample = new VulkanExample();
-    vulkanExample->initVulkan();
-    vulkanExample->setupWindow();
-    vulkanExample->prepare();
-    vulkanExample->renderLoop();
-    delete(vulkanExample);
-    return 0;
-}
-#elif defined(VK_USE_PLATFORM_XCB_KHR)
+
 static void handleEvent(const xcb_generic_event_t *event)
 {
     if (vulkanExample != NULL)
@@ -1169,4 +1106,3 @@ int main(const int argc, const char *argv[])
     delete(vulkanExample);
     return 0;
 }
-#endif

@@ -17,7 +17,7 @@ ENDIF()
 
 FIND_PATH(GLM_SUBMODULE_DIR external/glm)
 if (NOT GLM_SUBMODULE_DIR)
-	EXECUTE_PROCESS(COMMAND git submodule update --init --recursive
+	EXECUTE_PROCESS(COMMAND git submodule update ---depth 1 -init --recursive
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 

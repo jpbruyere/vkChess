@@ -1,21 +1,21 @@
 #include "pbrrenderer2.h"
 
-pbrRenderer2::pbrRenderer2 () : vkRenderer()
+pbrRenderer::pbrRenderer () : vkRenderer()
 {
 }
 
-void pbrRenderer2::create(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
+void pbrRenderer::create(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
                      VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
                      VulkanExampleBase::UniformBuffers& _sharedUbos) {
     vkRenderer::create(_device,_swapChain,_depthFormat,_sampleCount,_sharedUbos);
 }
 
-pbrRenderer2::~pbrRenderer2() {
+pbrRenderer::~pbrRenderer() {
     if (prepared)
         destroy();
 }
 
-void pbrRenderer2::destroy() {
+void pbrRenderer::destroy() {
     prepared = false;
 
     vkDestroyPipeline(device->dev, pipelines.skybox, nullptr);
@@ -28,7 +28,7 @@ void pbrRenderer2::destroy() {
     vkRenderer::destroy();
 }
 
-void pbrRenderer2::prepareModels() {
+void pbrRenderer::prepareModels() {
     for (uint i=0; i<models.size(); i++) {
         models[i].buildInstanceBuffer();
         models[i].allocateDescriptorSet (shadingCtx);
@@ -36,7 +36,7 @@ void pbrRenderer2::prepareModels() {
     buildCommandBuffer();
 }
 
-void pbrRenderer2::configurePipelineLayout () {
+void pbrRenderer::configurePipelineLayout () {
     shadingCtx = new vks::ShadingContext (device, 2);
 
     shadingCtx->addDescriptorSetLayout(
@@ -56,14 +56,14 @@ void pbrRenderer2::configurePipelineLayout () {
     shadingCtx->prepare();
 
 }
-void pbrRenderer2::loadRessources() {
+void pbrRenderer::loadRessources() {
     textures.environmentCube.loadFromFile("data/textures/papermill_hdr16f_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, device );
     skybox.loadFromFile("data/models/Box/glTF-Embedded/Box.gltf", device);
 
     generateBRDFLUT();
     generateCubemaps();
 }
-void pbrRenderer2::freeRessources() {
+void pbrRenderer::freeRessources() {
     skybox.destroy();
 
     textures.environmentCube.destroy();
@@ -71,7 +71,7 @@ void pbrRenderer2::freeRessources() {
     textures.prefilteredCube.destroy();
     textures.lutBrdf.destroy();
 }
-void pbrRenderer2::prepareDescriptors()
+void pbrRenderer::prepareDescriptors()
 {
     dsScene = shadingCtx->allocateDescriptorSet(0);
 
@@ -84,7 +84,7 @@ void pbrRenderer2::prepareDescriptors()
             {0,4,&textures.lutBrdf}
         });
 }
-void pbrRenderer2::preparePipeline() {
+void pbrRenderer::preparePipeline() {
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
     inputAssemblyStateCI.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
@@ -218,7 +218,7 @@ void pbrRenderer2::preparePipeline() {
         vkDestroyShaderModule(device->dev, shaderStage.module, nullptr);
 }
 
-void pbrRenderer2::draw(VkCommandBuffer cmdBuff) {
+void pbrRenderer::draw(VkCommandBuffer cmdBuff) {
     vkCmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &dsScene, 0, NULL);
 
     vkCmdBindPipeline(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
@@ -231,7 +231,7 @@ void pbrRenderer2::draw(VkCommandBuffer cmdBuff) {
     models[0].buildCommandBuffer (cmdBuff, pipelineLayout);
 }
 
-void pbrRenderer2::generateBRDFLUT()
+void pbrRenderer::generateBRDFLUT()
 {
     auto tStart = std::chrono::high_resolution_clock::now();
 
@@ -487,7 +487,7 @@ void pbrRenderer2::generateBRDFLUT()
     auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
     std::cout << "Generating BRDF LUT took " << tDiff << " ms" << std::endl;
 }
-void pbrRenderer2::generateCubemaps()
+void pbrRenderer::generateCubemaps()
 {
     enum Target { IRRADIANCE = 0, PREFILTEREDENV = 1 };
 
