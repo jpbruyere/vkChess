@@ -15,8 +15,6 @@ namespace vks {
 
         vks::VulkanDevice*          device;
         vks::RenderTarget*          renderTarget;
-        VkRenderPass                renderPass;
-        std::vector<VkFramebuffer>  frameBuffers;
         vks::VkEngine::UniformBuffers sharedUBOs;
 
         vks::ShadingContext*        shadingCtx;
@@ -57,6 +55,7 @@ namespace vks {
         virtual void destroy();
 
         virtual void buildCommandBuffer ();
+        virtual void rebuildCommandBuffer ();
         virtual void draw(VkCommandBuffer cmdBuff);
 
         void submit (VkQueue queue, VkSemaphore *waitSemaphore, uint32_t waitSemaphoreCount);

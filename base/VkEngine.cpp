@@ -156,7 +156,10 @@ std::string vks::VkEngine::getWindowTitle()
 
 static void onkey_callback (GLFWwindow* window, int key, int scanCode, int action ,int mods){
     vks::VkEngine* e = (vks::VkEngine*)glfwGetWindowUserPointer(window);
-
+    if (action == GLFW_PRESS)
+        e->keyDown(key);
+    else
+        e->keyUp(key);
 }
 static void char_callback (GLFWwindow* window, uint32_t c){
     vks::VkEngine* e = (vks::VkEngine*)glfwGetWindowUserPointer(window);
@@ -299,8 +302,9 @@ void vks::VkEngine::start () {
             viewUpdated = false;
             viewChanged();
         }
-//            handleEvent(event);
+
         render();
+
         frameCounter++;
         auto tEnd = std::chrono::high_resolution_clock::now();
         auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
@@ -321,10 +325,7 @@ void vks::VkEngine::start () {
 
 
 
-void vks::VkEngine::prepare()
-{
-
-}
+void vks::VkEngine::prepare(){}
 
 void vks::VkEngine::renderFrame()
 {
@@ -437,8 +438,8 @@ void vks::VkEngine::createInstance (const std::string& app_name, std::vector<con
 }
 
 
-void vks::VkEngine::handleEvent(const xcb_generic_event_t *event)
-{
+//void vks::VkEngine::handleEvent(const xcb_generic_event_t *event)
+//{
 //    switch (event->response_type & 0x7f)
 //    {
 //    case XCB_CLIENT_MESSAGE:
@@ -560,7 +561,7 @@ void vks::VkEngine::handleEvent(const xcb_generic_event_t *event)
 //    default:
 //        break;
 //    }
-}
+//}
 
 
 void vks::VkEngine::viewChanged() {
@@ -588,7 +589,6 @@ void vks::VkEngine::prepareUniformBuffers()
     updateUniformBuffers();
     updateParams();
 }
-
 void vks::VkEngine::updateUniformBuffers()
 {
     // 3D object
@@ -598,7 +598,6 @@ void vks::VkEngine::updateUniformBuffers()
     mvpMatrices.camPos = camera.position * -1.0f;
     sharedUBOs.matrices.copyTo (&mvpMatrices, sizeof(mvpMatrices));
 }
-
 void vks::VkEngine::updateParams()
 {
     lightingParams.lightDir = glm::vec4(-10.0f, 150.f, -10.f, 1.0f);
@@ -606,64 +605,22 @@ void vks::VkEngine::updateParams()
 }
 
 
-void vks::VkEngine::keyDown(uint32_t) {}
-void vks::VkEngine::keyUp(uint32_t) {}
-void vks::VkEngine::keyPressed(uint32_t key) {
-#if !defined(VK_USE_PLATFORM_ANDROID_KHR)
-    switch (key) {
-    case KEY_F1:
-        if (lightingParams.exposure > 0.1f) {
-            lightingParams.exposure -= 0.1f;
-            updateParams();
-            std::cout << "Exposure: " << lightingParams.exposure << std::endl;
-        }
-        break;
-    case KEY_F2:
-        if (lightingParams.exposure < 10.0f) {
-            lightingParams.exposure += 0.1f;
-            updateParams();
-            std::cout << "Exposure: " << lightingParams.exposure << std::endl;
-        }
-        break;
-    case KEY_F3:
-        if (lightingParams.gamma > 0.1f) {
-            lightingParams.gamma -= 0.1f;
-            updateParams();
-            std::cout << "Gamma: " << lightingParams.gamma << std::endl;
-        }
-        break;
-    case KEY_F4:
-        if (lightingParams.gamma < 10.0f) {
-            lightingParams.gamma += 0.1f;
-            updateParams();
-            std::cout << "Gamma: " << lightingParams.gamma << std::endl;
-        }
-        break;
-    }
-#endif
-}
 
 
 void vks::VkEngine::windowResize()
 {
-    if (!prepared) {
+    if (!prepared)
         return;
-    }
     prepared = false;
 
     vkDeviceWaitIdle(device->dev);
-    width = destWidth;
-    height = destHeight;
-    //setupSwapChain();
 
-    //depthStencil.destroy();
-//    if (settings.multiSampling) {
-//        renderTarget.color.destroy();
-//        renderTarget.depth.destroy();
-//    }
-//    vkDestroyFramebuffer(device->dev, frameBuffer, nullptr);
+//    int w, h;
+//    glfwGetWindowSize(window, &w, &h);
+//    width = (uint32_t)w;
+//    height = (uint32_t)h;
 
-//    setupFrameBuffer();
+    swapChain->create(width, height);
 
     vkDeviceWaitIdle(device->dev);
 
@@ -673,6 +630,49 @@ void vks::VkEngine::windowResize()
     prepared = true;
 }
 
+void vks::VkEngine::keyDown(uint32_t key) {
+    switch (key) {
+    case GLFW_KEY_ESCAPE :
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+        break;
+    }
+
+}
+void vks::VkEngine::keyUp(uint32_t key) {
+    keyPressed (key);
+}
+void vks::VkEngine::keyPressed(uint32_t key) {
+    switch (key) {
+    case GLFW_KEY_F1:
+        if (lightingParams.exposure > 0.1f) {
+            lightingParams.exposure -= 0.1f;
+            updateParams();
+            std::cout << "Exposure: " << lightingParams.exposure << std::endl;
+        }
+        break;
+    case GLFW_KEY_F2:
+        if (lightingParams.exposure < 10.0f) {
+            lightingParams.exposure += 0.1f;
+            updateParams();
+            std::cout << "Exposure: " << lightingParams.exposure << std::endl;
+        }
+        break;
+    case GLFW_KEY_F3:
+        if (lightingParams.gamma > 0.1f) {
+            lightingParams.gamma -= 0.1f;
+            updateParams();
+            std::cout << "Gamma: " << lightingParams.gamma << std::endl;
+        }
+        break;
+    case GLFW_KEY_F4:
+        if (lightingParams.gamma < 10.0f) {
+            lightingParams.gamma += 0.1f;
+            updateParams();
+            std::cout << "Gamma: " << lightingParams.gamma << std::endl;
+        }
+        break;
+    }
+}
 void vks::VkEngine::handleMouseMove(int32_t x, int32_t y)
 {
     int32_t dx = (int32_t)mousePos.x - x;
@@ -685,12 +685,7 @@ void vks::VkEngine::handleMouseMove(int32_t x, int32_t y)
         return;
     }
 
-    /*if (mouseButtons.left) {
-        camera.rotate(glm::vec3(dy * camera.rotationSpeed, -dx * camera.rotationSpeed, 0.0f));
-        viewUpdated = true;
-    }*/
-    if (mouseButtons[GLFW_MOUSE_BUTTON_LEFT]) {
-        //camera.translate(glm::vec3(-0.0f, 0.0f, dy * .005f * camera.movementSpeed));
+    if (mouseButtons[GLFW_MOUSE_BUTTON_RIGHT]) {
         camera.rotate(glm::vec3(-dy * camera.rotationSpeed, -dx * camera.rotationSpeed, 0.0f));
         viewUpdated = true;
     }
@@ -700,8 +695,6 @@ void vks::VkEngine::handleMouseMove(int32_t x, int32_t y)
     }
     mousePos = glm::vec2((float)x, (float)y);
 }
-
 void vks::VkEngine::handleMouseButtonDown(int buttonIndex) {}
-
 void vks::VkEngine::handleMouseButtonUp(int buttonIndex) {}
 

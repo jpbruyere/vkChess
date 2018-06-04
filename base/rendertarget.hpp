@@ -11,12 +11,19 @@ namespace vks {
         std::vector<vks::Texture>   attachments;
         uint                        presentableAttachment = 0;
         VkSampleCountFlagBits       samples;
+
+        VkRenderPass                renderPass;
+        std::vector<VkFramebuffer>  frameBuffers;
+
         RenderTarget(ptrSwapchain _swapChain, VkSampleCountFlagBits _samples = VK_SAMPLE_COUNT_1_BIT);
         virtual ~RenderTarget();
 
         uint32_t getWidth();
         uint32_t getHeight();
-        VkRenderPass createDefaultRenderPass ();
-        void createFrameBuffers(VkRenderPass renderPass, std::vector<VkFramebuffer> &frameBuffers);
+        void createAttachments();
+        void createDefaultRenderPass();
+        void createFrameBuffers();
+
+        void updateSize();
     };
 }

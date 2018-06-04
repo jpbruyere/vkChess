@@ -81,7 +81,7 @@ public:
         camera.rotationSpeed = 0.25f;
         camera.setPerspective(50.0f, (float)width / (float)height, 0.1f, 50.0f);
         camera.setRotation({ 42.0f, 0.0f, 0.0f });
-        camera.setPosition({ .0f, -11.f, -14.f });
+        camera.setPosition({ .0f, -12.f, -15.f });
 
         settings.validation = true;
 
@@ -252,8 +252,9 @@ public:
                 lineBuf[ptr++] = c;
         }
         lineBuf[ptr] = 0;
-        std::cout << "=> " << lineBuf;
-
+#if DEBUG
+      //  std::cout << "=> " << lineBuf;
+#endif
         if (strncmp (lineBuf, "readyok", 7)==0){
             stockFishIsReady = true;
             if (!gameStarted && playerIsAi[currentPlayer]) {
@@ -1066,12 +1067,17 @@ public:
 
         startGame();
     }
+    virtual void windowResize() {
+        VkEngine::windowResize();
+        rebuildCommandBuffers();
+    }
     void buildCommandBuffers() {
 
     }
     void rebuildCommandBuffers() {
-
+        sceneRenderer->rebuildCommandBuffer();
     }
+
 
     void render () {
         if (!prepared)
@@ -1092,13 +1098,6 @@ public:
 VkChess *vkChess;
 
 
-static void handleEvent(const xcb_generic_event_t *event)
-{
-    if (vkChess != NULL)
-    {
-        vkChess->handleEvent(event);
-    }
-}
 int main(const int argc, const char *argv[])
 {
 

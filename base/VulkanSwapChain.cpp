@@ -181,6 +181,9 @@ void vks::VulkanSwapChain::create(uint32_t& width, uint32_t& height)
 
     presentInfo.pSwapchains = &swapChain;
 
+    for (uint i=0; i<boundRenderTargets.size(); i++)
+        boundRenderTargets[i]->updateSize();
+
     // If an existing swap chain is re-created, destroy the old swap chain
     // This also cleans up all the presentable images
     if (infos.oldSwapchain != VK_NULL_HANDLE)
@@ -215,6 +218,8 @@ void vks::VulkanSwapChain::create(uint32_t& width, uint32_t& height)
 
         VK_CHECK_RESULT(vkCreateImageView(vke->device->dev, &colorAttachmentView, nullptr, &buffers[i].view));
     }
+    for (uint i=0; i<boundRenderTargets.size(); i++)
+        boundRenderTargets[i]->createFrameBuffers ();
 }
 
 

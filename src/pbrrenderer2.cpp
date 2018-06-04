@@ -155,7 +155,7 @@ void pbrRenderer::preparePipeline() {
 
     VkGraphicsPipelineCreateInfo pipelineCI = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
     pipelineCI.layout = pipelineLayout;
-    pipelineCI.renderPass = renderPass;
+    pipelineCI.renderPass = renderTarget->renderPass;
     pipelineCI.pInputAssemblyState = &inputAssemblyStateCI;
     pipelineCI.pVertexInputState = &vertexInputStateCI;
     pipelineCI.pRasterizationState = &rasterizationStateCI;
