@@ -138,8 +138,6 @@ namespace vks
         uint32_t getMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties, VkBool32 *memTypeFound = nullptr);
         VkFormat getSuitableDepthFormat ();
         uint32_t getQueueFamilyIndex(VkQueueFlagBits queueFlags);
-        VkResult createLogicalDevice(VkPhysicalDeviceFeatures enabledFeatures, std::vector<const char*> enabledExtensions,
-                                     VkQueueFlags requestedQueueTypes = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 
         VkCommandPool createCommandPool(uint32_t queueFamilyIndex,
                                         VkCommandPoolCreateFlags createFlags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);

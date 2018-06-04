@@ -154,6 +154,28 @@ std::string vks::VkEngine::getWindowTitle()
     return windowTitle;
 }
 
+static void onkey_callback (GLFWwindow* window, int key, int scanCode, int action ,int mods){
+    vks::VkEngine* e = (vks::VkEngine*)glfwGetWindowUserPointer(window);
+
+}
+static void char_callback (GLFWwindow* window, uint32_t c){
+    vks::VkEngine* e = (vks::VkEngine*)glfwGetWindowUserPointer(window);
+}
+static void mouse_move_callback(GLFWwindow* window, double x, double y){
+    vks::VkEngine* e = (vks::VkEngine*)glfwGetWindowUserPointer(window);
+    e->handleMouseMove((int32_t)x, (int32_t)y);
+}
+static void mouse_button_callback(GLFWwindow* window, int but, int state, int modif){
+    vks::VkEngine* e = (vks::VkEngine*)glfwGetWindowUserPointer(window);
+    if (state == GLFW_PRESS){
+        e->mouseButtons[but] = true;
+        e->handleMouseButtonDown(but);
+    }else{
+        e->mouseButtons[but] = false;
+        e->handleMouseButtonUp(but);
+    }
+}
+
 vks::VkEngine::VkEngine (uint32_t _width, uint32_t _height,
                     VkPhysicalDeviceType preferedGPU)
 {
@@ -196,9 +218,18 @@ vks::VkEngine::VkEngine (uint32_t _width, uint32_t _height,
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE,  GLFW_TRUE);
     glfwWindowHint(GLFW_FLOATING,   GLFW_FALSE);
-    glfwWindowHint(GLFW_DECORATED,  GLFW_FALSE);
+    glfwWindowHint(GLFW_DECORATED,  GLFW_TRUE);
 
     window = glfwCreateWindow (width, height, "Window Title", NULL, NULL);
+
+    glfwSetWindowUserPointer(window, this);
+
+    glfwSetKeyCallback          (window, onkey_callback);
+    glfwSetCharCallback         (window, char_callback);
+    glfwSetMouseButtonCallback  (window, mouse_button_callback);
+    glfwSetCursorPosCallback    (window, mouse_move_callback);
+    //glfwSetScrollCallback       (e->window, onScroll);
+
 
     VK_CHECK_RESULT(glfwCreateWindowSurface(instance, window, NULL, &surface));
 
@@ -212,7 +243,9 @@ vks::VkEngine::VkEngine (uint32_t _width, uint32_t _height,
         if (phyInfos.properties.deviceType == preferedGPU)
             break;
     }
+
 }
+
 
 vks::VkEngine::~VkEngine()
 {
@@ -229,6 +262,9 @@ vks::VkEngine::~VkEngine()
 
     delete device;
 
+    //if (settings.validation)
+    //    vkDestroyDebugReportCallback(instance, debugReportCallback, nullptr);
+
     vkDestroyInstance (instance, VK_NULL_HANDLE);
 
     return;
@@ -238,122 +274,56 @@ vks::VkEngine::~VkEngine()
 //    vkDestroyRenderPass     (vulkanDevice->dev, renderPass, nullptr);
 //    vkDestroyFramebuffer    (vulkanDevice->dev, frameBuffer, nullptr);
 
-//
 
-//    depthStencil.destroy();
-
-//    if (settings.multiSampling) {
-//        multisampleTarget.color.destroy();
-//        multisampleTarget.depth.destroy();
-//    }
-//    delete vulkanDevice;
-//    if (settings.validation)
-//        vkDestroyDebugReportCallback(instance, debugReportCallback, nullptr);
-
-//    vkDestroyInstance(instance, nullptr);
-//#if defined(_DIRECT2DISPLAY)
-//#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
-//    wl_shell_surface_destroy(shell_surface);
-//    wl_surface_destroy(surface);
-//    if (keyboard)
-//        wl_keyboard_destroy(keyboard);
-//    if (pointer)
-//        wl_pointer_destroy(pointer);
-//    wl_seat_destroy(seat);
-//    wl_shell_destroy(shell);
-//    wl_compositor_destroy(compositor);
-//    wl_registry_destroy(registry);
-//    wl_display_disconnect(display);
-//#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-//    // todo : android cleanup (if required)
-//#elif defined(VK_USE_PLATFORM_XCB_KHR)
-//    xcb_destroy_window(connection, window);
-//    xcb_disconnect(connection);
-//#endif
 }
 
 void vks::VkEngine::start () {
     device = new vks::VulkanDevice (phyInfos);
 
-    depthFormat = device->getSuitableDepthFormat();
-
-    swapChain = new VulkanSwapChain (this);
+    swapChain = new VulkanSwapChain (this, false);
     swapChain->create (width, height);
 
-    renderTarget = new RenderTarget(swapChain, depthFormat, settings.sampleCount);
+    renderTarget = new RenderTarget(swapChain, settings.sampleCount);
 
     prepareUniformBuffers();
+
+    prepare();
+
+    prepared = true;
+
+    while (!glfwWindowShouldClose (window)) {
+        glfwPollEvents();
+        auto tStart = std::chrono::high_resolution_clock::now();
+        if (viewUpdated)
+        {
+            viewUpdated = false;
+            viewChanged();
+        }
+//            handleEvent(event);
+        render();
+        frameCounter++;
+        auto tEnd = std::chrono::high_resolution_clock::now();
+        auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
+        frameTimer = tDiff / 1000.0f;
+        camera.update(frameTimer);
+        if (camera.moving())
+            viewUpdated = true;
+        fpsTimer += (float)tDiff;
+        if (fpsTimer > 1000.0f)
+        {
+            glfwSetWindowTitle(window, getWindowTitle().c_str());
+            lastFPS = (float)frameCounter * (1000.0f / fpsTimer);
+            fpsTimer = 0.0f;
+            frameCounter = 0;
+        }
+    }
 }
 
-void vks::VkEngine::createRenderPass () {
-    std::array<VkAttachmentDescription, 2> attachments = {};
 
-    // Multisampled attachment that we render to
-    attachments[0].format = swapChain->infos.imageFormat;
-    attachments[0].samples = settings.sampleCount;
-    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    // Multisampled depth attachment we render to
-    attachments[1].format = depthFormat;
-    attachments[1].samples = settings.sampleCount;
-    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference colorReference = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    VkAttachmentReference depthReference = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-
-    VkSubpassDescription subpass = {};
-    subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount    = 1;
-    subpass.pColorAttachments       = &colorReference;
-    subpass.pDepthStencilAttachment = &depthReference;
-
-    std::array<VkSubpassDependency, 2> dependencies;
-
-    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[0].dstSubpass = 0;
-    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-    dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-    dependencies[1].srcSubpass = 0;
-    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-    dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-    VkRenderPassCreateInfo renderPassCI = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-    renderPassCI.attachmentCount = attachments.size();
-    renderPassCI.pAttachments = attachments.data();
-    renderPassCI.subpassCount = 1;
-    renderPassCI.pSubpasses = &subpass;
-    renderPassCI.dependencyCount = 2;
-    renderPassCI.pDependencies = dependencies.data();
-    VK_CHECK_RESULT(vkCreateRenderPass(device->dev, &renderPassCI, nullptr, &renderPass));
-}
 
 void vks::VkEngine::prepare()
 {
-    //setupFrameBuffer();
 
-//    swapChain-> = &renderTarget;
-//    swapChain->depthStencil = &depthStencil;
-
-
-    prepared = true;
 }
 
 void vks::VkEngine::renderFrame()
@@ -674,24 +644,6 @@ void vks::VkEngine::keyPressed(uint32_t key) {
 }
 
 
-void vks::VkEngine::setupFrameBuffer()
-{
-    VkImageView attachments[] = {
-        renderTarget->attachments[0].view,
-        renderTarget->attachments[1].view
-    };
-
-    VkFramebufferCreateInfo frameBufferCI = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-    frameBufferCI.renderPass        = renderPass;
-    frameBufferCI.attachmentCount   = 2;
-    frameBufferCI.pAttachments      = attachments;
-    frameBufferCI.width             = width;
-    frameBufferCI.height            = height;
-    frameBufferCI.layers            = 1;
-    VK_CHECK_RESULT(vkCreateFramebuffer(device->dev, &frameBufferCI, nullptr, &frameBuffer));
-}
-
-
 void vks::VkEngine::windowResize()
 {
     if (!prepared) {
@@ -709,9 +661,9 @@ void vks::VkEngine::windowResize()
 //        renderTarget.color.destroy();
 //        renderTarget.depth.destroy();
 //    }
-    vkDestroyFramebuffer(device->dev, frameBuffer, nullptr);
+//    vkDestroyFramebuffer(device->dev, frameBuffer, nullptr);
 
-    setupFrameBuffer();
+//    setupFrameBuffer();
 
     vkDeviceWaitIdle(device->dev);
 
@@ -737,12 +689,12 @@ void vks::VkEngine::handleMouseMove(int32_t x, int32_t y)
         camera.rotate(glm::vec3(dy * camera.rotationSpeed, -dx * camera.rotationSpeed, 0.0f));
         viewUpdated = true;
     }*/
-    if (mouseButtons.right) {
+    if (mouseButtons[GLFW_MOUSE_BUTTON_LEFT]) {
         //camera.translate(glm::vec3(-0.0f, 0.0f, dy * .005f * camera.movementSpeed));
         camera.rotate(glm::vec3(-dy * camera.rotationSpeed, -dx * camera.rotationSpeed, 0.0f));
         viewUpdated = true;
     }
-    if (mouseButtons.middle) {
+    if (mouseButtons[GLFW_MOUSE_BUTTON_MIDDLE]) {
         camera.translate(glm::vec3(-dx * 0.01f, -dy * 0.01f, 0.0f));
         viewUpdated = true;
     }

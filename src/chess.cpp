@@ -899,7 +899,7 @@ public:
     glm::vec3 vResult;
 
     virtual void handleMouseButtonDown(int butIndex) {
-        if (butIndex != 1)
+        if (butIndex != GLFW_MOUSE_BUTTON_LEFT)
             return;
 
         if (hoverSquare == selectedSquare || hoverSquare.x <0)
@@ -1006,7 +1006,7 @@ public:
 
     virtual void prepareRenderers() {
         sceneRenderer = new pbrRenderer();
-        sceneRenderer->create(device, swapChain, depthFormat, settings.sampleCount, sharedUBOs);
+        sceneRenderer->create(device, renderTarget, sharedUBOs);
 
         sceneRenderer->models.resize(1);
         mod = &sceneRenderer->models[0];
@@ -1048,7 +1048,7 @@ public:
         sceneRenderer->buildCommandBuffer();
 
         debugRenderer = new vks::vkRenderer ();
-        debugRenderer->create(device, swapChain, depthFormat, settings.sampleCount, sharedUBOs);
+        debugRenderer->create(device, renderTarget, sharedUBOs);
         //debugRenderer->clear();
         debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
         debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,1,0), glm::vec3(0,1,0));
@@ -1056,7 +1056,6 @@ public:
         debugRenderer->flush();
     }
     virtual void prepare() {
-        VkEngine::prepare();
 
         prepareRenderers();
 
