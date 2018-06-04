@@ -5,13 +5,10 @@ const VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPU
 
 vks::vkRenderer::vkRenderer () {}
 
-void vks::vkRenderer::create(ptrVkDev _device, VulkanSwapChain *_swapChain,
-                   VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
+void vks::vkRenderer::create(ptrVkDev _device, vks::RenderTarget *_renderTarget,
                    VkEngine::UniformBuffers& _sharedUbos) {
-    swapChain   = _swapChain;
+    renderTarget= _renderTarget;
     device      = _device;
-    depthFormat = _depthFormat;
-    sampleCount = _sampleCount;
     sharedUBOs = _sharedUbos;
 
     prepare();
@@ -45,8 +42,8 @@ void vks::vkRenderer::destroy() {
     vkDestroyCommandPool    (device->dev, commandPool, VK_NULL_HANDLE);
 }
 void vks::vkRenderer::prepare() {
-    fences.resize(swapChain->imageCount);
-    for (uint i=0; i<swapChain->imageCount; i++)
+    fences.resize (renderTarget->swapChain->imageCount);
+    for (uint i=0; i<renderTarget->swapChain->imageCount; i++)
         fences[i] = device->createFence(true);
 
     drawComplete= device->createSemaphore();
@@ -57,7 +54,7 @@ void vks::vkRenderer::prepare() {
     submitInfo.commandBufferCount   = 1;
     submitInfo.pSignalSemaphores    = &drawComplete;
 
-    prepareRenderPass();
+    prepareRendering();
 
     VkCommandPoolCreateInfo cmdPoolInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     cmdPoolInfo.queueFamilyIndex = device->queueFamilyIndices.graphics;
@@ -80,89 +77,11 @@ void vks::vkRenderer::prepare() {
     prepared = true;
 }
 
-void vks::vkRenderer::prepareRenderPass()
+void vks::vkRenderer::prepareRendering()
 {
-    VkAttachmentDescription attachments[] = {
-        {0, //color
-            swapChain->infos.imageFormat, sampleCount,
-            VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        },{0,//depth
-           depthFormat, sampleCount,
-           VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
-           VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-           VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-        },{0,// resolve
-           swapChain->infos.imageFormat, VK_SAMPLE_COUNT_1_BIT,
-           VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
-           VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-           VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-        }
-    };
+    renderPass = renderTarget->createDefaultRenderPass();
 
-    VkAttachmentReference colorReference    = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-    VkAttachmentReference depthReference    = {1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-    VkAttachmentReference resolveReference  = {2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-
-    VkSubpassDescription subpass = {};
-    subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount    = 1;
-    subpass.pColorAttachments       = &colorReference;
-    subpass.pDepthStencilAttachment = &depthReference;
-    if (sampleCount > VK_SAMPLE_COUNT_1_BIT)
-        subpass.pResolveAttachments     = &resolveReference;
-
-
-    VkSubpassDependency dependencies[] =
-    {
-//        { VK_SUBPASS_EXTERNAL, VK_SUBPASS_EXTERNAL,
-//          VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-//          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
-//          VK_DEPENDENCY_BY_REGION_BIT}
-
-        { VK_SUBPASS_EXTERNAL, 0,
-          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-          VK_DEPENDENCY_BY_REGION_BIT},
-        { 0, VK_SUBPASS_EXTERNAL,
-          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-          VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT,
-          VK_DEPENDENCY_BY_REGION_BIT},
-    };
-
-    VkRenderPassCreateInfo renderPassCI = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-    renderPassCI.attachmentCount    = sampleCount > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
-    renderPassCI.pAttachments       = attachments;
-    renderPassCI.subpassCount       = 1;
-    renderPassCI.pSubpasses         = &subpass;
-    renderPassCI.dependencyCount    = 2;
-    renderPassCI.pDependencies      = dependencies;
-    VK_CHECK_RESULT(vkCreateRenderPass(device->dev, &renderPassCI, nullptr, &renderPass));
-
-    prepareFrameBuffer();
-}
-void vks::vkRenderer::prepareFrameBuffer () {
-    VkImageView attachments[] = {
-        //swapChain->multisampleTarget->color.view,
-        //swapChain->multisampleTarget->depth.view,
-        VK_NULL_HANDLE
-    };
-
-    VkFramebufferCreateInfo frameBufferCI = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-    frameBufferCI.renderPass        = renderPass;
-    frameBufferCI.attachmentCount   = (sampleCount > VK_SAMPLE_COUNT_1_BIT) ? 3 : 2;
-    frameBufferCI.pAttachments      = attachments;
-    frameBufferCI.width             = swapChain->infos.imageExtent.width;
-    frameBufferCI.height            = swapChain->infos.imageExtent.height;
-    frameBufferCI.layers            = 1;
-
-    frameBuffers.resize(swapChain->imageCount);
-
-    for (uint32_t i = 0; i < frameBuffers.size(); i++) {
-        attachments[2] = swapChain->buffers[i].view;
-        VK_CHECK_RESULT(vkCreateFramebuffer(device->dev, &frameBufferCI, nullptr, &frameBuffers[i]));
-    }
+    renderTarget->createFrameBuffers (renderPass, frameBuffers);
 }
 
 void vks::vkRenderer::configurePipelineLayout () {
@@ -231,8 +150,8 @@ void vks::vkRenderer::preparePipeline()
 
     VkPipelineMultisampleStateCreateInfo multisampleStateCI = {VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
 
-    if (sampleCount > VK_SAMPLE_COUNT_1_BIT)
-        multisampleStateCI.rasterizationSamples = sampleCount;
+    if (renderTarget->samples > VK_SAMPLE_COUNT_1_BIT)
+        multisampleStateCI.rasterizationSamples = renderTarget->samples;
 
     std::vector<VkDynamicState> dynamicStateEnables = {
         VK_DYNAMIC_STATE_VIEWPORT,
@@ -311,8 +230,8 @@ void vks::vkRenderer::buildCommandBuffer (){
     renderPassBeginInfo.renderPass = renderPass;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
-    renderPassBeginInfo.renderArea.extent = swapChain->infos.imageExtent;
-    renderPassBeginInfo.clearValueCount = (sampleCount > VK_SAMPLE_COUNT_1_BIT) ? 3 : 2;
+    renderPassBeginInfo.renderArea.extent = renderTarget->swapChain->infos.imageExtent;
+    renderPassBeginInfo.clearValueCount = (renderTarget->samples > VK_SAMPLE_COUNT_1_BIT) ? 3 : 2;
     renderPassBeginInfo.pClearValues = clearValues;
 
     for (size_t i = 0; i < cmdBuffers.size(); ++i)
@@ -323,14 +242,14 @@ void vks::vkRenderer::buildCommandBuffer (){
         vkCmdBeginRenderPass(cmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         VkViewport viewport{};
-        viewport.width = (float)swapChain->infos.imageExtent.width;
-        viewport.height = (float)swapChain->infos.imageExtent.height;
+        viewport.width = (float)renderTarget->getWidth();
+        viewport.height = (float)renderTarget->getHeight();
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(cmdBuffers[i], 0, 1, &viewport);
 
         VkRect2D scissor{};
-        scissor.extent = { swapChain->infos.imageExtent.width, swapChain->infos.imageExtent.height};
+        scissor.extent = { renderTarget->getWidth(), renderTarget->getHeight()};
         vkCmdSetScissor(cmdBuffers[i], 0, 1, &scissor);
 
         draw (cmdBuffers[i]);
@@ -344,14 +263,14 @@ void vks::vkRenderer::buildCommandBuffer (){
 void vks::vkRenderer::submit (VkQueue queue, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount) {
     if (!prepared)
         return;
-    submitInfo.pCommandBuffers		= &cmdBuffers[swapChain->currentBuffer];
+    submitInfo.pCommandBuffers		= &cmdBuffers[renderTarget->swapChain->currentBuffer];
     submitInfo.waitSemaphoreCount	= waitSemaphoreCount;
     submitInfo.pWaitSemaphores		= waitSemaphore;
 
-    VK_CHECK_RESULT(vkWaitForFences(device->dev, 1, &fences[swapChain->currentBuffer], VK_TRUE, DRAW_FENCE_TIMEOUT));
-    VK_CHECK_RESULT(vkResetFences(device->dev, 1, &fences[swapChain->currentBuffer]));
+    VK_CHECK_RESULT(vkWaitForFences(device->dev, 1, &fences[renderTarget->swapChain->currentBuffer], VK_TRUE, DRAW_FENCE_TIMEOUT));
+    VK_CHECK_RESULT(vkResetFences(device->dev, 1, &fences[renderTarget->swapChain->currentBuffer]));
 
-    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fences[swapChain->currentBuffer]));
+    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fences[renderTarget->swapChain->currentBuffer]));
 }
 void vks::vkRenderer::clear(){
     vertices.clear();
@@ -359,7 +278,7 @@ void vks::vkRenderer::clear(){
 }
 
 void vks::vkRenderer::flush(){
-    VK_CHECK_RESULT(vkWaitForFences(device->dev, 1, &fences[swapChain->currentBuffer], VK_TRUE, DRAW_FENCE_TIMEOUT));
+    VK_CHECK_RESULT(vkWaitForFences(device->dev, 1, &fences[renderTarget->swapChain->currentBuffer], VK_TRUE, DRAW_FENCE_TIMEOUT));
     memcpy(vertexBuff.mapped, vertices.data(), vertices.size() * sizeof(float));
     vertexCount = vertices.size() / 6;
     buildCommandBuffer();

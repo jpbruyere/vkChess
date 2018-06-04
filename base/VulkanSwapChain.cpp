@@ -129,6 +129,8 @@ vks::VulkanSwapChain::VulkanSwapChain(ptrVkEngine _vke, bool vsync) {
         }
     }
 
+    depthFormat = vke->device->getSuitableDepthFormat();
+
     presentCompleteSemaphore = vke->device->createSemaphore();
 
     presentInfo = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};

@@ -13,10 +13,8 @@ namespace vks {
 
         bool prepared = false;
 
-        VkSampleCountFlagBits       sampleCount;
-
         vks::VulkanDevice*          device;
-        vks::VulkanSwapChain*       swapChain;
+        vks::RenderTarget*          renderTarget;
         VkRenderPass                renderPass;
         std::vector<VkFramebuffer>  frameBuffers;
         vks::VkEngine::UniformBuffers sharedUBOs;
@@ -34,15 +32,12 @@ namespace vks {
         VkPipeline              pipeline;
         VkPipelineLayout        pipelineLayout;
 
-        VkFormat                depthFormat;
-
         std::vector<float>	vertices;
         vks::Buffer			vertexBuff;
         uint32_t			vBufferSize = 10000 * sizeof(float) * 6;
 
         virtual void prepare();
-        virtual void prepareRenderPass();
-        virtual void prepareFrameBuffer();
+        virtual void prepareRendering();
         virtual void configurePipelineLayout();
         virtual void loadRessources();
         virtual void freeRessources();
@@ -57,8 +52,7 @@ namespace vks {
         vkRenderer ();
         virtual ~vkRenderer();
 
-        virtual void create (ptrVkDev _device, VulkanSwapChain *_swapChain,
-                                               VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
+        virtual void create (ptrVkDev _device, vks::RenderTarget* _renderTarget,
                                                VkEngine::UniformBuffers& _sharedUbos);
         virtual void destroy();
 

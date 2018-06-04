@@ -44,8 +44,6 @@ namespace vks {
         uint32_t    destWidth;
         uint32_t    destHeight;
 
-        RenderTarget* renderTarget;
-
         void        windowResize();
         std::string getWindowTitle();
 
@@ -58,10 +56,8 @@ namespace vks {
         vks::vkPhyInfo      phyInfos;
         GLFWwindow*         window;
 
-        VkFormat        depthFormat;
-        VkRenderPass    renderPass;
-        VkFramebuffer   frameBuffer;
         struct VulkanSwapChain* swapChain;
+        RenderTarget*           renderTarget;
         std::string     title = "Vulkan Example";
         std::string     name = "vulkanExample";
     public:
@@ -114,11 +110,7 @@ namespace vks {
             glm::vec2 axisRight = glm::vec2(0.0f);
         } gamePadState;
 
-        struct MouseButtons {
-            bool left = false;
-            bool right = false;
-            bool middle = false;
-        } mouseButtons;
+        bool mouseButtons[3] = {false,false,false};
 
     #if defined(VK_USE_PLATFORM_XCB_KHR)
 
@@ -146,10 +138,7 @@ namespace vks {
         virtual void handleMouseMove(int32_t x, int32_t y);
         virtual void handleMouseButtonDown(int buttonIndex);
         virtual void handleMouseButtonUp(int buttonIndex);
-        virtual void setupFrameBuffer();
         virtual void prepare();
-
-        void createRenderPass ();
 
         void prepareUniformBuffers();
         void updateUniformBuffers();

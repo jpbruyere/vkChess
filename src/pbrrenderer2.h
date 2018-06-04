@@ -38,9 +38,6 @@ public:
     pbrRenderer ();
     virtual ~pbrRenderer();
 
-    virtual void create(vks::VulkanDevice* _device, vks::VulkanSwapChain *_swapChain,
-                        VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
-                        vks::VkEngine::UniformBuffers& _sharedUbos);
     virtual void destroy();
 
     void renderPrimitive(vkglTF::Primitive &primitive, VkCommandBuffer commandBuffer);

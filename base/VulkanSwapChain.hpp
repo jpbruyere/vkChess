@@ -43,7 +43,7 @@ namespace vks {
         uint32_t                    currentBuffer = 0;
         VkSemaphore                 presentCompleteSemaphore;
         VkPresentInfoKHR            presentInfo;
-
+        VkFormat                    depthFormat;
 
         //RenderTarget* multisampleTarget;
         ptrTexture depthStencil;
