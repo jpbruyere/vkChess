@@ -17,7 +17,7 @@ ENDIF()
 
 FIND_PATH(GLM_SUBMODULE_DIR external/glm)
 if (NOT GLM_SUBMODULE_DIR)
-	EXECUTE_PROCESS(COMMAND git submodule update ---depth 1 -init --recursive
+	EXECUTE_PROCESS(COMMAND git submodule update --depth -init --recursive
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
@@ -32,7 +32,9 @@ MESSAGE(STATUS "VK_LAYER_PATH = $ENV{VK_LAYER_PATH}")
 
 include_directories(external/glm)
 include_directories(external/gli)
+include_directories(external/glfw)
 include_directories(base)
+
 
 OPTION(USE_D2D_WSI "Build the project using Direct to Display swapchain" OFF)
 OPTION(USE_WAYLAND_WSI "Build the project using Wayland swapchain" OFF)
@@ -167,24 +169,25 @@ FILE(GLOB SOURCES src/*.cpp)
 
 if(WIN32)
 	ADD_EXECUTABLE(${PROJECT_NAME} WIN32 ${MAIN_CPP} ${SOURCES} ${SHADERS})
-	TARGET_INCLUDE_DIRECTORIES(${PROJECT_NAME} PRIVATE
-		${BULLET_INCLUDE_DIR}
-	)
+	#TARGET_INCLUDE_DIRECTORIES(${PROJECT_NAME} PRIVATE
+		#${BULLET_INCLUDE_DIR}
+	#)
 	TARGET_LINK_LIBRARIES(${PROJECT_NAME}
 		base
 		${Vulkan_LIBRARY}
 		${WINLIBS}
-		${BULLET_LIBRARIES})
+		#${BULLET_LIBRARIES}
+	)
 else(WIN32)
 	ADD_EXECUTABLE(${PROJECT_NAME} ${MAIN_CPP} ${SOURCES} ${SHADERS})
 	TARGET_INCLUDE_DIRECTORIES(${PROJECT_NAME} PRIVATE
-		${BULLET_INCLUDE_DIR}
+		#${BULLET_INCLUDE_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}/src
 		${CMAKE_CURRENT_SOURCE_DIR}/base
 	)
 	TARGET_LINK_LIBRARIES(${PROJECT_NAME}
 		base
-		${BULLET_LIBRARIES}
+		#{BULLET_LIBRARIES}
 	)
 endif(WIN32)
 

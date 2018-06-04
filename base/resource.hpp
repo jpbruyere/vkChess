@@ -1,11 +1,11 @@
 #pragma once
 
-#include "VkEngine.h"
+#include "vke.h"
 
 namespace vks {
     struct Resource
     {
-        VulkanDevice*           device;
+        ptrVkDev                device;
         VkDeviceMemory          deviceMemory= VK_NULL_HANDLE;
         VkMemoryRequirements    memReqs    = {};
 

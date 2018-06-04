@@ -10,7 +10,8 @@
 
 #pragma once
 
-#include "VkEngine.h"
+#include "vke.h"
+
 #include "VulkanDevice.hpp"
 #include "resource.hpp"
 
@@ -32,7 +33,7 @@ namespace vks
         /** @brief Memory propertys flags to be filled by external source at buffer creation (to query at some later point) */
         VkMemoryPropertyFlags memoryPropertyFlags;
 
-        void create(VulkanDevice* _device, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags _memoryPropertyFlags, VkDeviceSize size, void *data = nullptr)
+        void create(ptrVkDev _device, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags _memoryPropertyFlags, VkDeviceSize size, void *data = nullptr)
         {
             device = _device;
 

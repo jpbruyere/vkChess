@@ -26,6 +26,7 @@
 #include <errno.h>
 
 #include "VkEngine.h"
+#include "VulkanSwapChain.hpp"
 #include "vkrenderer.h"
 #include "pbrrenderer2.h"
 
@@ -34,7 +35,7 @@
 
 #define CAPTURE_ZONE_HEIGHT 5
 
-class VkEngine : public VulkanExampleBase
+class VkChess : public vks::VkEngine
 {
 public:
     enum Color { White, Black };
@@ -68,11 +69,11 @@ public:
         std::queue<glm::mat4> queue;
     };
 
-    vkRenderer*     debugRenderer = nullptr;
+    vks::vkRenderer*     debugRenderer = nullptr;
     pbrRenderer*   sceneRenderer = nullptr;
 
 
-    VkEngine() : VulkanExampleBase()
+    VkChess() : VkEngine(1024, 768, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
     {
         title = "Vulkan Chess glTf 2.0 PBR";
         camera.type = Camera::CameraType::firstperson;
@@ -83,9 +84,13 @@ public:
         camera.setPosition({ .0f, -11.f, -14.f });
 
         settings.validation = true;
+
+        phyInfos.enabledFeatures.samplerAnisotropy
+                = phyInfos.features.samplerAnisotropy;
+        phyInfos.selectQueue (phyInfos.pQueue);
     }
 
-    ~VkEngine()
+    ~VkChess()
     {
         delete(debugRenderer);
         delete(sceneRenderer);
@@ -944,7 +949,7 @@ public:
         }
     }
     virtual void handleMouseMove(int32_t x, int32_t y) {
-        VulkanExampleBase::handleMouseMove(x, y);
+        VkEngine::handleMouseMove(x, y);
 
         vMouse = glm::unProject(glm::vec3(mousePos.x, mousePos.y, 0.0), mvpMatrices.view, mvpMatrices.projection,
                                   glm::vec4(0,0,width,height));
@@ -994,19 +999,19 @@ public:
             toogleHint();
             break;
         default:
-            VulkanExampleBase::keyPressed(key);
+            VkEngine::keyPressed(key);
             break;
         }
     }
 
     virtual void prepareRenderers() {
         sceneRenderer = new pbrRenderer();
-        sceneRenderer->create(vulkanDevice, &swapChain, depthFormat, settings.sampleCount, sharedUBOs);
+        sceneRenderer->create(device, swapChain, depthFormat, settings.sampleCount, sharedUBOs);
 
         sceneRenderer->models.resize(1);
         mod = &sceneRenderer->models[0];
 
-        mod->loadFromFile ("data/models/chess.gltf", vulkanDevice, true);
+        mod->loadFromFile ("data/models/chess.gltf", device, true);
 
         mod->addInstance("frame", glm::translate(glm::mat4(1.0),       glm::vec3( 0,0,0)));
 
@@ -1042,8 +1047,8 @@ public:
         sceneRenderer->prepareModels();
         sceneRenderer->buildCommandBuffer();
 
-        debugRenderer = new vkRenderer ();
-        debugRenderer->create(vulkanDevice, &swapChain, depthFormat, settings.sampleCount, sharedUBOs);
+        debugRenderer = new vks::vkRenderer ();
+        debugRenderer->create(device, swapChain, depthFormat, settings.sampleCount, sharedUBOs);
         //debugRenderer->clear();
         debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
         debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,1,0), glm::vec3(0,1,0));
@@ -1051,7 +1056,7 @@ public:
         debugRenderer->flush();
     }
     virtual void prepare() {
-        VulkanExampleBase::prepare();
+        VkEngine::prepare();
 
         prepareRenderers();
 
@@ -1075,34 +1080,35 @@ public:
 
         prepareFrame();
 
-        sceneRenderer->submit(vulkanDevice->queue, &presentCompleteSemaphore, 1);
+        sceneRenderer->submit(device->queue, &swapChain->presentCompleteSemaphore, 1);
         //VK_CHECK_RESULT(swapChain.queuePresent(queue, this->drawComplete));
 
         //debugRenderer->submit(vulkanDevice->queue,&sceneRenderer->drawComplete, 1);
-        VK_CHECK_RESULT(swapChain.queuePresent(vulkanDevice->queue, sceneRenderer->drawComplete));
+        VK_CHECK_RESULT(swapChain->queuePresent(device->queue, sceneRenderer->drawComplete));
 
         update();
     }
 };
 
-VkEngine *vulkanExample;
+VkChess *vkChess;
 
 
 static void handleEvent(const xcb_generic_event_t *event)
 {
-    if (vulkanExample != NULL)
+    if (vkChess != NULL)
     {
-        vulkanExample->handleEvent(event);
+        vkChess->handleEvent(event);
     }
 }
 int main(const int argc, const char *argv[])
 {
-    for (size_t i = 0; i < argc; i++) { VkEngine::args.push_back(argv[i]); };
-    vulkanExample = new VkEngine();
-    vulkanExample->initVulkan();
-    vulkanExample->setupWindow();
-    vulkanExample->prepare();
-    vulkanExample->renderLoop();
-    delete(vulkanExample);
+
+    for (size_t i = 0; i < argc; i++) { VkChess::args.push_back(argv[i]); };
+    vkChess = new VkChess();
+    vkChess->start();
+    //vulkanExample->setupWindow();
+    //vulkanExample->prepare();
+    //vulkanExample->renderLoop();
+    delete(vkChess);
     return 0;
 }

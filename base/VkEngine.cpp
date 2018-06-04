@@ -6,15 +6,25 @@
 * This code is licensed under the MIT license (MIT) (http://opensource.org/licenses/MIT)
 */
 
-
-#include "VkEngine.h"
-#include <fstream>
-
 #define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
 #include "tiny_gltf.h"
 
+#include "VkEngine.h"
 
+#define ENGINE_NAME     "vke"
+#define ENGINE_VERSION  1
+
+#include "VulkanDevice.hpp"
+
+#include "resource.hpp"
+#include "VulkanBuffer.hpp"
+#include "texture.hpp"
+
+#include "shadingcontext.hpp"
+#include "rendertarget.hpp"
+
+#include "VulkanSwapChain.hpp"
 
 VkPipelineShaderStageCreateInfo loadShader(VkDevice device, std::string filename, VkShaderStageFlagBits stage)
 {
@@ -111,7 +121,7 @@ std::array<bmchar, 255> parsebmFont(const std::string& fileName)
     return fontChars;
 }
 
-std::vector<const char*> VulkanExampleBase::args;
+std::vector<const char*> vks::VkEngine::args;
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debugMessageCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objType, uint64_t srcObject, size_t location, int32_t msgCode, const char * pLayerPrefix, const char * pMsg, void * pUserData)
 {
@@ -136,74 +146,150 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugMessageCallback(VkDebugReportFlagsEXT flags,
     return VK_FALSE;
 }
 
-VkResult VulkanExampleBase::createInstance(bool enableValidation)
+std::string vks::VkEngine::getWindowTitle()
 {
-    this->settings.validation = enableValidation;
-
-    // Validation can also be forced via a define
-#if defined(_VALIDATION)
-    this->settings.validation = true;
-#endif
-
-    VkApplicationInfo appInfo = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
-    appInfo.pApplicationName = name.c_str();
-    appInfo.pEngineName = name.c_str();
-    appInfo.apiVersion = VK_API_VERSION_1_0;
-
-    std::vector<const char*> instanceExtensions = { VK_KHR_SURFACE_EXTENSION_NAME };
-
-    // Enable surface extensions depending on os
-#if defined(VK_USE_PLATFORM_XCB_KHR)
-    instanceExtensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
-#endif
-
-    VkInstanceCreateInfo instanceCreateInfo = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
-    instanceCreateInfo.pApplicationInfo = &appInfo;
-
-    if (instanceExtensions.size() > 0)
-    {
-        if (settings.validation)
-            instanceExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-        instanceCreateInfo.enabledExtensionCount = (uint32_t)instanceExtensions.size();
-        instanceCreateInfo.ppEnabledExtensionNames = instanceExtensions.data();
-    }
-    if (settings.validation) {
-#if !defined(__ANDROID__)
-        instanceCreateInfo.enabledLayerCount = 1;
-        const char *validationLayerNames[] = {
-            "VK_LAYER_LUNARG_standard_validation"
-        };
-        instanceCreateInfo.ppEnabledLayerNames = validationLayerNames;
-#else
-        instanceCreateInfo.enabledLayerCount = 6;
-        const char *validationLayerNames[] = {
-            "VK_LAYER_GOOGLE_threading",
-            "VK_LAYER_LUNARG_parameter_validation",
-            "VK_LAYER_LUNARG_object_tracker",
-            "VK_LAYER_LUNARG_core_validation",
-            "VK_LAYER_LUNARG_swapchain",
-            "VK_LAYER_GOOGLE_unique_objects"
-        };
-        instanceCreateInfo.ppEnabledLayerNames = validationLayerNames;
-#endif
-    }
-    return vkCreateInstance(&instanceCreateInfo, nullptr, &instance);
-}
-
-std::string VulkanExampleBase::getWindowTitle()
-{
-    std::string device(deviceProperties.deviceName);
+    std::string device(this->device->properties.deviceName);
     std::string windowTitle;
     windowTitle = title + " - " + device + " - " + std::to_string(lastFPS) + " fps";
     return windowTitle;
 }
 
+vks::VkEngine::VkEngine (uint32_t _width, uint32_t _height,
+                    VkPhysicalDeviceType preferedGPU)
+{
+    width = _width;
+    height = _height;
 
-void VulkanExampleBase::createRenderPass () {
+    char* numConvPtr;
+    // Parse command line arguments
+    for (size_t i = 0; i < args.size(); i++)
+    {
+        if (args[i] == std::string("-validation")) {
+            settings.validation = true;
+        }
+        if (args[i] == std::string("-vsync")) {
+            settings.vsync = true;
+        }
+        if ((args[i] == std::string("-f")) || (args[i] == std::string("--fullscreen"))) {
+            settings.fullscreen = true;
+        }
+        if ((args[i] == std::string("-w")) || (args[i] == std::string("--width"))) {
+            uint32_t w = strtol(args[i + 1], &numConvPtr, 10);
+            if (numConvPtr != args[i + 1]) { width = w; };
+        }
+        if ((args[i] == std::string("-h")) || (args[i] == std::string("--height"))) {
+            uint32_t h = strtol(args[i + 1], &numConvPtr, 10);
+            if (numConvPtr != args[i + 1]) { height = h; };
+        }
+    }
+
+    glfwInit();
+    assert (glfwVulkanSupported()==GLFW_TRUE);
+
+    uint32_t enabledExtsCount = 0, phyCount = 0;
+    const char ** enabledExts = glfwGetRequiredInstanceExtensions (&enabledExtsCount);
+    std::vector<const char*> enabledExtentions;
+    enabledExtentions.assign(enabledExts, enabledExts + enabledExtsCount);
+
+    createInstance ("vkChess", enabledExtentions);
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE,  GLFW_TRUE);
+    glfwWindowHint(GLFW_FLOATING,   GLFW_FALSE);
+    glfwWindowHint(GLFW_DECORATED,  GLFW_FALSE);
+
+    window = glfwCreateWindow (width, height, "Window Title", NULL, NULL);
+
+    VK_CHECK_RESULT(glfwCreateWindowSurface(instance, window, NULL, &surface));
+
+    VK_CHECK_RESULT(vkEnumeratePhysicalDevices(instance, &phyCount, nullptr));
+    assert(phyCount > 0);
+    std::vector<VkPhysicalDevice> physicalDevices(phyCount);
+    VK_CHECK_RESULT(vkEnumeratePhysicalDevices(instance, &phyCount, physicalDevices.data()));
+
+    for (uint i=0; i<phyCount; i++){
+        phyInfos = vks::vkPhyInfo(physicalDevices[i], surface);
+        if (phyInfos.properties.deviceType == preferedGPU)
+            break;
+    }
+}
+
+vks::VkEngine::~VkEngine()
+{
+    sharedUBOs.matrices.destroy();
+    sharedUBOs.params.destroy();
+
+    delete renderTarget;
+    delete swapChain;
+
+    if (surface != VK_NULL_HANDLE)
+        vkDestroySurfaceKHR(instance, surface, nullptr);
+
+    surface = VK_NULL_HANDLE;
+
+    delete device;
+
+    vkDestroyInstance (instance, VK_NULL_HANDLE);
+
+    return;
+
+//    // Clean up Vulkan resources
+
+//    vkDestroyRenderPass     (vulkanDevice->dev, renderPass, nullptr);
+//    vkDestroyFramebuffer    (vulkanDevice->dev, frameBuffer, nullptr);
+
+//
+
+//    depthStencil.destroy();
+
+//    if (settings.multiSampling) {
+//        multisampleTarget.color.destroy();
+//        multisampleTarget.depth.destroy();
+//    }
+//    delete vulkanDevice;
+//    if (settings.validation)
+//        vkDestroyDebugReportCallback(instance, debugReportCallback, nullptr);
+
+//    vkDestroyInstance(instance, nullptr);
+//#if defined(_DIRECT2DISPLAY)
+//#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
+//    wl_shell_surface_destroy(shell_surface);
+//    wl_surface_destroy(surface);
+//    if (keyboard)
+//        wl_keyboard_destroy(keyboard);
+//    if (pointer)
+//        wl_pointer_destroy(pointer);
+//    wl_seat_destroy(seat);
+//    wl_shell_destroy(shell);
+//    wl_compositor_destroy(compositor);
+//    wl_registry_destroy(registry);
+//    wl_display_disconnect(display);
+//#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+//    // todo : android cleanup (if required)
+//#elif defined(VK_USE_PLATFORM_XCB_KHR)
+//    xcb_destroy_window(connection, window);
+//    xcb_disconnect(connection);
+//#endif
+}
+
+void vks::VkEngine::start () {
+    device = new vks::VulkanDevice (phyInfos);
+
+    depthFormat = device->getSuitableDepthFormat();
+
+    swapChain = new VulkanSwapChain (this);
+    swapChain->create (width, height);
+
+    renderTarget = new RenderTarget(swapChain, depthFormat, settings.sampleCount);
+
+    prepareUniformBuffers();
+}
+
+void vks::VkEngine::createRenderPass () {
     std::array<VkAttachmentDescription, 2> attachments = {};
 
     // Multisampled attachment that we render to
-    attachments[0].format = swapChain.colorFormat;
+    attachments[0].format = swapChain->infos.imageFormat;
     attachments[0].samples = settings.sampleCount;
     attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -256,28 +342,21 @@ void VulkanExampleBase::createRenderPass () {
     renderPassCI.pSubpasses = &subpass;
     renderPassCI.dependencyCount = 2;
     renderPassCI.pDependencies = dependencies.data();
-    VK_CHECK_RESULT(vkCreateRenderPass(vulkanDevice->dev, &renderPassCI, nullptr, &renderPass));
+    VK_CHECK_RESULT(vkCreateRenderPass(device->dev, &renderPassCI, nullptr, &renderPass));
 }
 
-void VulkanExampleBase::prepare()
+void vks::VkEngine::prepare()
 {
-    initSwapchain();
-    setupSwapChain();
-
-    presentCompleteSemaphore = vulkanDevice->createSemaphore();
-
-    createRenderTarget();
-
     //setupFrameBuffer();
 
-    swapChain.multisampleTarget = &multisampleTarget;
-    swapChain.depthStencil = &depthStencil;
+//    swapChain-> = &renderTarget;
+//    swapChain->depthStencil = &depthStencil;
 
-    prepareUniformBuffers();
+
     prepared = true;
 }
 
-void VulkanExampleBase::renderFrame()
+void vks::VkEngine::renderFrame()
 {
     auto tStart = std::chrono::high_resolution_clock::now();
     if (viewUpdated)
@@ -305,56 +384,56 @@ void VulkanExampleBase::renderFrame()
     }
 }
 
-void VulkanExampleBase::renderLoop()
+void vks::VkEngine::renderLoop()
 {
-    destWidth = width;
-    destHeight = height;
-#if defined(VK_USE_PLATFORM_XCB_KHR)
-    xcb_flush(connection);
-    while (!quit)
-    {
-        auto tStart = std::chrono::high_resolution_clock::now();
-        if (viewUpdated)
-        {
-            viewUpdated = false;
-            viewChanged();
-        }
-        xcb_generic_event_t *event;
-        while ((event = xcb_poll_for_event(connection)))
-        {
-            handleEvent(event);
-            free(event);
-        }
-        render();
-        frameCounter++;
-        auto tEnd = std::chrono::high_resolution_clock::now();
-        auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
-        frameTimer = tDiff / 1000.0f;
-        camera.update(frameTimer);
-        if (camera.moving())
-        {
-            viewUpdated = true;
-        }
-        fpsTimer += (float)tDiff;
-        if (fpsTimer > 1000.0f)
-        {
-            std::string windowTitle = getWindowTitle();
-            xcb_change_property(connection, XCB_PROP_MODE_REPLACE,
-                window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8,
-                windowTitle.size(), windowTitle.c_str());
-            lastFPS = (float)frameCounter * (1000.0f / fpsTimer);
-            fpsTimer = 0.0f;
-            frameCounter = 0;
-        }
-    }
-#endif
-    // Flush device to make sure all resources can be freed
-    vkDeviceWaitIdle(vulkanDevice->dev);
+//    destWidth = width;
+//    destHeight = height;
+//#if defined(VK_USE_PLATFORM_XCB_KHR)
+//    xcb_flush(connection);
+//    while (!quit)
+//    {
+//        auto tStart = std::chrono::high_resolution_clock::now();
+//        if (viewUpdated)
+//        {
+//            viewUpdated = false;
+//            viewChanged();
+//        }
+//        xcb_generic_event_t *event;
+//        while ((event = xcb_poll_for_event(connection)))
+//        {
+//            handleEvent(event);
+//            free(event);
+//        }
+//        render();
+//        frameCounter++;
+//        auto tEnd = std::chrono::high_resolution_clock::now();
+//        auto tDiff = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
+//        frameTimer = tDiff / 1000.0f;
+//        camera.update(frameTimer);
+//        if (camera.moving())
+//        {
+//            viewUpdated = true;
+//        }
+//        fpsTimer += (float)tDiff;
+//        if (fpsTimer > 1000.0f)
+//        {
+//            std::string windowTitle = getWindowTitle();
+//            xcb_change_property(connection, XCB_PROP_MODE_REPLACE,
+//                window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8,
+//                windowTitle.size(), windowTitle.c_str());
+//            lastFPS = (float)frameCounter * (1000.0f / fpsTimer);
+//            fpsTimer = 0.0f;
+//            frameCounter = 0;
+//        }
+//    }
+//#endif
+//    // Flush device to make sure all resources can be freed
+//    vkDeviceWaitIdle(vulkanDevice->dev);
 }
 
-void VulkanExampleBase::prepareFrame()
+void vks::VkEngine::prepareFrame()
 {
-    VkResult err = swapChain.acquireNextImage(presentCompleteSemaphore);
+    VkResult err = swapChain->acquireNextImage();
     if ((err == VK_ERROR_OUT_OF_DATE_KHR) || (err == VK_SUBOPTIMAL_KHR)) {
         windowResize();
     } else {
@@ -362,386 +441,172 @@ void VulkanExampleBase::prepareFrame()
     }
 }
 
-VulkanExampleBase::VulkanExampleBase()
-{
-    char* numConvPtr;
-    // Parse command line arguments
-    for (size_t i = 0; i < args.size(); i++)
-    {
-        if (args[i] == std::string("-validation")) {
-            settings.validation = true;
-        }
-        if (args[i] == std::string("-vsync")) {
-            settings.vsync = true;
-        }
-        if ((args[i] == std::string("-f")) || (args[i] == std::string("--fullscreen"))) {
-            settings.fullscreen = true;
-        }
-        if ((args[i] == std::string("-w")) || (args[i] == std::string("--width"))) {
-            uint32_t w = strtol(args[i + 1], &numConvPtr, 10);
-            if (numConvPtr != args[i + 1]) { width = w; };
-        }
-        if ((args[i] == std::string("-h")) || (args[i] == std::string("--height"))) {
-            uint32_t h = strtol(args[i + 1], &numConvPtr, 10);
-            if (numConvPtr != args[i + 1]) { height = h; };
-        }
-    }
+void vks::VkEngine::createInstance (const std::string& app_name, std::vector<const char*>& extentions) {
+    VkApplicationInfo   infos = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
+                        infos.pApplicationName  = app_name.c_str();
+                        infos.applicationVersion= 1;
+                        infos.pEngineName       = ENGINE_NAME;
+                        infos.engineVersion     = ENGINE_VERSION;
+                        infos.apiVersion        = VK_API_VERSION_1_0;
 
-#if defined(VK_USE_PLATFORM_XCB_KHR)
-    initxcbConnection();
-#endif
-}
 
-VulkanExampleBase::~VulkanExampleBase()
-{
-    sharedUBOs.matrices.destroy();
-    sharedUBOs.params.destroy();
-
-    // Clean up Vulkan resources
-    swapChain.cleanup();
-
-    vkDestroyRenderPass     (vulkanDevice->dev, renderPass, nullptr);
-    vkDestroyFramebuffer    (vulkanDevice->dev, frameBuffer, nullptr);
-
-    vulkanDevice->destroySemaphore(presentCompleteSemaphore);
-
-    depthStencil.destroy();
-
-    if (settings.multiSampling) {
-        multisampleTarget.color.destroy();
-        multisampleTarget.depth.destroy();
-    }
-    delete vulkanDevice;
-    if (settings.validation)
-        vkDestroyDebugReportCallback(instance, debugReportCallback, nullptr);
-
-    vkDestroyInstance(instance, nullptr);
-#if defined(_DIRECT2DISPLAY)
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
-    wl_shell_surface_destroy(shell_surface);
-    wl_surface_destroy(surface);
-    if (keyboard)
-        wl_keyboard_destroy(keyboard);
-    if (pointer)
-        wl_pointer_destroy(pointer);
-    wl_seat_destroy(seat);
-    wl_shell_destroy(shell);
-    wl_compositor_destroy(compositor);
-    wl_registry_destroy(registry);
-    wl_display_disconnect(display);
-#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-    // todo : android cleanup (if required)
-#elif defined(VK_USE_PLATFORM_XCB_KHR)
-    xcb_destroy_window(connection, window);
-    xcb_disconnect(connection);
-#endif
-}
-
-void VulkanExampleBase::initVulkan()
-{
-    VkResult err;
-
-    err = createInstance(settings.validation);
-    if (err) {
-        std::cerr << "Could not create Vulkan instance!" << std::endl;
-        exit(err);
-    }
-
-    if (settings.validation) {
-        vkCreateDebugReportCallback = reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT"));
-        vkDestroyDebugReportCallback = reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT"));
-        VkDebugReportCallbackCreateInfoEXT debugCreateInfo{};
-        debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
-        debugCreateInfo.pfnCallback = (PFN_vkDebugReportCallbackEXT)debugMessageCallback;
-        debugCreateInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
-        VK_CHECK_RESULT(vkCreateDebugReportCallback(instance, &debugCreateInfo, nullptr, &debugReportCallback));
-    }
-
-    uint32_t gpuCount = 0;
-    VK_CHECK_RESULT(vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr));
-    assert(gpuCount > 0);
-    std::vector<VkPhysicalDevice> physicalDevices(gpuCount);
-    err = vkEnumeratePhysicalDevices(instance, &gpuCount, physicalDevices.data());
-    if (err) {
-        std::cerr << "Could not enumerate physical devices!" << std::endl;
-        exit(err);
-    }
-    uint32_t selectedDevice = 0;
-#if !defined(VK_USE_PLATFORM_ANDROID_KHR)
-    for (size_t i = 0; i < args.size(); i++) {
-        if ((args[i] == std::string("-g")) || (args[i] == std::string("--gpu"))) {
-            char* endptr;
-            uint32_t index = strtol(args[i + 1], &endptr, 10);
-            if (endptr != args[i + 1])  {
-                if (index > gpuCount - 1) {
-                    std::cerr << "Selected device index " << index << " is out of range, reverting to device 0 (use -listgpus to show available Vulkan devices)" << std::endl;
-                } else {
-                    std::cout << "Selected Vulkan device " << index << std::endl;
-                    selectedDevice = index;
-                }
-            };
-            break;
-        }
-    }
+    std::vector<const char*> enabledLayers;
+#if DEBUG
+    enabledLayers.push_back ("VK_LAYER_LUNARG_standard_validation");
 #endif
 
-    VkPhysicalDevice phy = physicalDevices[selectedDevice];
+    VkInstanceCreateInfo inst_info = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+                         inst_info.pApplicationInfo        = &infos;
+                         inst_info.enabledExtensionCount   = extentions.size();
+                         inst_info.ppEnabledExtensionNames = extentions.data();
+                         inst_info.enabledLayerCount       = enabledLayers.size();
+                         inst_info.ppEnabledLayerNames     = enabledLayers.data();
 
-    vkGetPhysicalDeviceProperties       (phy, &deviceProperties);
-    vkGetPhysicalDeviceFeatures         (phy, &deviceFeatures);
-    vkGetPhysicalDeviceMemoryProperties (phy, &deviceMemoryProperties);
+    VK_CHECK_RESULT(vkCreateInstance (&inst_info, NULL, &instance));
 
-    vulkanDevice = new vks::VulkanDevice(phy);
-    VkPhysicalDeviceFeatures enabledFeatures = {};
-    if (deviceFeatures.samplerAnisotropy)
-        enabledFeatures.samplerAnisotropy = VK_TRUE;
-
-    std::vector<const char*> enabledExtensions{};
-    VkResult res = vulkanDevice->createLogicalDevice(enabledFeatures, enabledExtensions);
-    if (res != VK_SUCCESS) {
-        std::cerr << "Could not create Vulkan device!" << std::endl;
-        exit(res);
-    }
-
-    depthFormat = vulkanDevice->getSuitableDepthFormat();
-
-    swapChain.connect(instance, vulkanDevice);
 }
 
-#if defined(VK_USE_PLATFORM_XCB_KHR)
 
-static inline xcb_intern_atom_reply_t* intern_atom_helper(xcb_connection_t *conn, bool only_if_exists, const char *str)
+void vks::VkEngine::handleEvent(const xcb_generic_event_t *event)
 {
-    xcb_intern_atom_cookie_t cookie = xcb_intern_atom(conn, only_if_exists, strlen(str), str);
-    return xcb_intern_atom_reply(conn, cookie, NULL);
+//    switch (event->response_type & 0x7f)
+//    {
+//    case XCB_CLIENT_MESSAGE:
+//        if ((*(xcb_client_message_event_t*)event).data.data32[0] ==
+//            (*atom_wm_delete_window).atom) {
+//            quit = true;
+//        }
+//        break;
+//    case XCB_MOTION_NOTIFY:
+//    {
+//        xcb_motion_notify_event_t *motion = (xcb_motion_notify_event_t *)event;
+//        handleMouseMove((int32_t)motion->event_x, (int32_t)motion->event_y);
+//        break;
+//    }
+//    break;
+//    case XCB_BUTTON_PRESS:
+//    {
+//        xcb_button_press_event_t *press = (xcb_button_press_event_t *)event;
+//        switch (press->detail) {
+//        case XCB_BUTTON_INDEX_1:
+//            mouseButtons.left = true;
+//            break;
+//        case XCB_BUTTON_INDEX_2:
+//            mouseButtons.middle = true;
+//            break;
+//        case XCB_BUTTON_INDEX_3:
+//            mouseButtons.right = true;
+//            break;
+//        case XCB_BUTTON_INDEX_4://wheel scroll up
+//            camera.translate(glm::vec3(0.0f, 0.0f, camera.zoomSpeed));
+//            viewUpdated = true;
+//            break;
+//        case XCB_BUTTON_INDEX_5://wheel scroll down
+//            camera.translate(glm::vec3(0.0f, 0.0f, -camera.zoomSpeed));
+//            viewUpdated = true;
+//            break;
+//        }
+//        handleMouseButtonDown(press->detail);
+//    }
+//    break;
+//    case XCB_BUTTON_RELEASE:
+//    {
+//        xcb_button_press_event_t *press = (xcb_button_press_event_t *)event;
+//        if (press->detail == XCB_BUTTON_INDEX_1)
+//            mouseButtons.left = false;
+//        if (press->detail == XCB_BUTTON_INDEX_2)
+//            mouseButtons.middle = false;
+//        if (press->detail == XCB_BUTTON_INDEX_3)
+//            mouseButtons.right = false;
+//        handleMouseButtonUp(press->detail);
+//    }
+//    break;
+//    case XCB_KEY_PRESS:
+//    {
+//        const xcb_key_release_event_t *keyEvent = (const xcb_key_release_event_t *)event;
+//        switch (keyEvent->detail)
+//        {
+//            case KEY_W:
+//                camera.keys.up = true;
+//                break;
+//            case KEY_S:
+//                camera.keys.down = true;
+//                break;
+//            case KEY_A:
+//                camera.keys.left = true;
+//                break;
+//            case KEY_D:
+//                camera.keys.right = true;
+//                break;
+//            case KEY_P:
+//                paused = !paused;
+//                break;
+//        }
+//        keyDown(keyEvent->detail);
+//    }
+//    break;
+//    case XCB_KEY_RELEASE:
+//    {
+//        const xcb_key_release_event_t *keyEvent = (const xcb_key_release_event_t *)event;
+//        switch (keyEvent->detail)
+//        {
+//            case KEY_W:
+//                camera.keys.up = false;
+//                break;
+//            case KEY_S:
+//                camera.keys.down = false;
+//                break;
+//            case KEY_A:
+//                camera.keys.left = false;
+//                break;
+//            case KEY_D:
+//                camera.keys.right = false;
+//                break;
+//            case KEY_ESCAPE:
+//                quit = true;
+//                break;
+//        }
+//        keyUp(keyEvent->detail);
+//        keyPressed(keyEvent->detail);
+//    }
+//    break;
+//    case XCB_DESTROY_NOTIFY:
+//        quit = true;
+//        break;
+//    case XCB_CONFIGURE_NOTIFY:
+//    {
+//        const xcb_configure_notify_event_t *cfgEvent = (const xcb_configure_notify_event_t *)event;
+//        if ((prepared) && ((cfgEvent->width != width) || (cfgEvent->height != height)))
+//        {
+//                destWidth = cfgEvent->width;
+//                destHeight = cfgEvent->height;
+//                if ((destWidth > 0) && (destHeight > 0))
+//                {
+//                    windowResize();
+//                }
+//        }
+//    }
+//    break;
+//    default:
+//        break;
+//    }
 }
 
-// Set up a window using XCB and request event types
-xcb_window_t VulkanExampleBase::setupWindow()
-{
-    uint32_t value_mask, value_list[32];
 
-    window = xcb_generate_id(connection);
-
-    value_mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
-    value_list[0] = screen->black_pixel;
-    value_list[1] =
-        XCB_EVENT_MASK_KEY_RELEASE |
-        XCB_EVENT_MASK_KEY_PRESS |
-        XCB_EVENT_MASK_EXPOSURE |
-        XCB_EVENT_MASK_STRUCTURE_NOTIFY |
-        XCB_EVENT_MASK_POINTER_MOTION |
-        XCB_EVENT_MASK_BUTTON_PRESS |
-        XCB_EVENT_MASK_BUTTON_RELEASE;
-
-    if (settings.fullscreen)
-    {
-        width = destWidth = screen->width_in_pixels;
-        height = destHeight = screen->height_in_pixels;
-    }
-
-    xcb_create_window(connection,
-        XCB_COPY_FROM_PARENT,
-        window, screen->root,
-        0, 0, width, height, 0,
-        XCB_WINDOW_CLASS_INPUT_OUTPUT,
-        screen->root_visual,
-        value_mask, value_list);
-
-    /* Magic code that will send notification when window is destroyed */
-    xcb_intern_atom_reply_t* reply = intern_atom_helper(connection, true, "WM_PROTOCOLS");
-    atom_wm_delete_window = intern_atom_helper(connection, false, "WM_DELETE_WINDOW");
-
-    xcb_change_property(connection, XCB_PROP_MODE_REPLACE,
-        window, (*reply).atom, 4, 32, 1,
-        &(*atom_wm_delete_window).atom);
-
-    std::string windowTitle = getWindowTitle();
-    xcb_change_property(connection, XCB_PROP_MODE_REPLACE,
-        window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8,
-        title.size(), windowTitle.c_str());
-
-    free(reply);
-
-    if (settings.fullscreen)
-    {
-        xcb_intern_atom_reply_t *atom_wm_state = intern_atom_helper(connection, false, "_NET_WM_STATE");
-        xcb_intern_atom_reply_t *atom_wm_fullscreen = intern_atom_helper(connection, false, "_NET_WM_STATE_FULLSCREEN");
-        xcb_change_property(connection,
-                XCB_PROP_MODE_REPLACE,
-                window, atom_wm_state->atom,
-                XCB_ATOM_ATOM, 32, 1,
-                &(atom_wm_fullscreen->atom));
-        free(atom_wm_fullscreen);
-        free(atom_wm_state);
-    }
-
-    xcb_map_window(connection, window);
-
-    return(window);
-}
-
-// Initialize XCB connection
-void VulkanExampleBase::initxcbConnection()
-{
-    const xcb_setup_t *setup;
-    xcb_screen_iterator_t iter;
-    int scr;
-
-    connection = xcb_connect(NULL, &scr);
-    if (connection == NULL) {
-        printf("Could not find a compatible Vulkan ICD!\n");
-        fflush(stdout);
-        exit(1);
-    }
-
-    setup = xcb_get_setup(connection);
-    iter = xcb_setup_roots_iterator(setup);
-    while (scr-- > 0)
-        xcb_screen_next(&iter);
-    screen = iter.data;
-}
-
-void VulkanExampleBase::handleEvent(const xcb_generic_event_t *event)
-{
-    switch (event->response_type & 0x7f)
-    {
-    case XCB_CLIENT_MESSAGE:
-        if ((*(xcb_client_message_event_t*)event).data.data32[0] ==
-            (*atom_wm_delete_window).atom) {
-            quit = true;
-        }
-        break;
-    case XCB_MOTION_NOTIFY:
-    {
-        xcb_motion_notify_event_t *motion = (xcb_motion_notify_event_t *)event;
-        handleMouseMove((int32_t)motion->event_x, (int32_t)motion->event_y);
-        break;
-    }
-    break;
-    case XCB_BUTTON_PRESS:
-    {
-        xcb_button_press_event_t *press = (xcb_button_press_event_t *)event;
-        switch (press->detail) {
-        case XCB_BUTTON_INDEX_1:
-            mouseButtons.left = true;
-            break;
-        case XCB_BUTTON_INDEX_2:
-            mouseButtons.middle = true;
-            break;
-        case XCB_BUTTON_INDEX_3:
-            mouseButtons.right = true;
-            break;
-        case XCB_BUTTON_INDEX_4://wheel scroll up
-            camera.translate(glm::vec3(0.0f, 0.0f, camera.zoomSpeed));
-            viewUpdated = true;
-            break;
-        case XCB_BUTTON_INDEX_5://wheel scroll down
-            camera.translate(glm::vec3(0.0f, 0.0f, -camera.zoomSpeed));
-            viewUpdated = true;
-            break;
-        }
-        handleMouseButtonDown(press->detail);
-    }
-    break;
-    case XCB_BUTTON_RELEASE:
-    {
-        xcb_button_press_event_t *press = (xcb_button_press_event_t *)event;
-        if (press->detail == XCB_BUTTON_INDEX_1)
-            mouseButtons.left = false;
-        if (press->detail == XCB_BUTTON_INDEX_2)
-            mouseButtons.middle = false;
-        if (press->detail == XCB_BUTTON_INDEX_3)
-            mouseButtons.right = false;
-        handleMouseButtonUp(press->detail);
-    }
-    break;
-    case XCB_KEY_PRESS:
-    {
-        const xcb_key_release_event_t *keyEvent = (const xcb_key_release_event_t *)event;
-        switch (keyEvent->detail)
-        {
-            case KEY_W:
-                camera.keys.up = true;
-                break;
-            case KEY_S:
-                camera.keys.down = true;
-                break;
-            case KEY_A:
-                camera.keys.left = true;
-                break;
-            case KEY_D:
-                camera.keys.right = true;
-                break;
-            case KEY_P:
-                paused = !paused;
-                break;
-        }
-        keyDown(keyEvent->detail);
-    }
-    break;
-    case XCB_KEY_RELEASE:
-    {
-        const xcb_key_release_event_t *keyEvent = (const xcb_key_release_event_t *)event;
-        switch (keyEvent->detail)
-        {
-            case KEY_W:
-                camera.keys.up = false;
-                break;
-            case KEY_S:
-                camera.keys.down = false;
-                break;
-            case KEY_A:
-                camera.keys.left = false;
-                break;
-            case KEY_D:
-                camera.keys.right = false;
-                break;
-            case KEY_ESCAPE:
-                quit = true;
-                break;
-        }
-        keyUp(keyEvent->detail);
-        keyPressed(keyEvent->detail);
-    }
-    break;
-    case XCB_DESTROY_NOTIFY:
-        quit = true;
-        break;
-    case XCB_CONFIGURE_NOTIFY:
-    {
-        const xcb_configure_notify_event_t *cfgEvent = (const xcb_configure_notify_event_t *)event;
-        if ((prepared) && ((cfgEvent->width != width) || (cfgEvent->height != height)))
-        {
-                destWidth = cfgEvent->width;
-                destHeight = cfgEvent->height;
-                if ((destWidth > 0) && (destHeight > 0))
-                {
-                    windowResize();
-                }
-        }
-    }
-    break;
-    default:
-        break;
-    }
-}
-#endif
-
-void VulkanExampleBase::viewChanged() {
+void vks::VkEngine::viewChanged() {
     updateUniformBuffers();
 }
 
-void VulkanExampleBase::prepareUniformBuffers()
+void vks::VkEngine::prepareUniformBuffers()
 {
     // Objact vertex shader uniform buffer
-    sharedUBOs.matrices.create(vulkanDevice,
+    sharedUBOs.matrices.create(device,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         sizeof(mvpMatrices));
 
     // Shared parameter uniform buffer
-    sharedUBOs.params.create(vulkanDevice,
+    sharedUBOs.params.create(device,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         sizeof(lightingParams));
@@ -754,7 +619,7 @@ void VulkanExampleBase::prepareUniformBuffers()
     updateParams();
 }
 
-void VulkanExampleBase::updateUniformBuffers()
+void vks::VkEngine::updateUniformBuffers()
 {
     // 3D object
     mvpMatrices.projection = camera.matrices.perspective;
@@ -764,16 +629,16 @@ void VulkanExampleBase::updateUniformBuffers()
     sharedUBOs.matrices.copyTo (&mvpMatrices, sizeof(mvpMatrices));
 }
 
-void VulkanExampleBase::updateParams()
+void vks::VkEngine::updateParams()
 {
     lightingParams.lightDir = glm::vec4(-10.0f, 150.f, -10.f, 1.0f);
     sharedUBOs.params.copyTo(&lightingParams, sizeof(lightingParams));
 }
 
 
-void VulkanExampleBase::keyDown(uint32_t) {}
-void VulkanExampleBase::keyUp(uint32_t) {}
-void VulkanExampleBase::keyPressed(uint32_t key) {
+void vks::VkEngine::keyDown(uint32_t) {}
+void vks::VkEngine::keyUp(uint32_t) {}
+void vks::VkEngine::keyPressed(uint32_t key) {
 #if !defined(VK_USE_PLATFORM_ANDROID_KHR)
     switch (key) {
     case KEY_F1:
@@ -809,35 +674,11 @@ void VulkanExampleBase::keyPressed(uint32_t key) {
 }
 
 
-void VulkanExampleBase::createRenderTarget () {
-    if (settings.multiSampling) {
-
-        multisampleTarget.color.create (vulkanDevice,
-                                        VK_IMAGE_TYPE_2D, swapChain.colorFormat, width, height,
-                                        VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL, 1, 1, 0,
-                                        settings.sampleCount);
-        multisampleTarget.color.createView(VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT,1,1);
-
-        multisampleTarget.depth.create (vulkanDevice,
-                                        VK_IMAGE_TYPE_2D, depthFormat, width, height,
-                                        VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_TILING_OPTIMAL, 1, 1, 0,
-                                        settings.sampleCount);
-        multisampleTarget.depth.createView(VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT);
-    }
-
-    depthStencil.create (vulkanDevice,
-                                    VK_IMAGE_TYPE_2D, depthFormat, width, height,
-                                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    depthStencil.createView(VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT);
-}
-
-void VulkanExampleBase::setupFrameBuffer()
+void vks::VkEngine::setupFrameBuffer()
 {
     VkImageView attachments[] = {
-        multisampleTarget.color.view,
-        multisampleTarget.depth.view
+        renderTarget->attachments[0].view,
+        renderTarget->attachments[1].view
     };
 
     VkFramebufferCreateInfo frameBufferCI = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
@@ -847,32 +688,32 @@ void VulkanExampleBase::setupFrameBuffer()
     frameBufferCI.width             = width;
     frameBufferCI.height            = height;
     frameBufferCI.layers            = 1;
-    VK_CHECK_RESULT(vkCreateFramebuffer(vulkanDevice->dev, &frameBufferCI, nullptr, &frameBuffer));
+    VK_CHECK_RESULT(vkCreateFramebuffer(device->dev, &frameBufferCI, nullptr, &frameBuffer));
 }
 
 
-void VulkanExampleBase::windowResize()
+void vks::VkEngine::windowResize()
 {
     if (!prepared) {
         return;
     }
     prepared = false;
 
-    vkDeviceWaitIdle(vulkanDevice->dev);
+    vkDeviceWaitIdle(device->dev);
     width = destWidth;
     height = destHeight;
-    setupSwapChain();
+    //setupSwapChain();
 
-    depthStencil.destroy();
-    if (settings.multiSampling) {
-        multisampleTarget.color.destroy();
-        multisampleTarget.depth.destroy();
-    }
-    vkDestroyFramebuffer(vulkanDevice->dev, frameBuffer, nullptr);
+    //depthStencil.destroy();
+//    if (settings.multiSampling) {
+//        renderTarget.color.destroy();
+//        renderTarget.depth.destroy();
+//    }
+    vkDestroyFramebuffer(device->dev, frameBuffer, nullptr);
 
     setupFrameBuffer();
 
-    vkDeviceWaitIdle(vulkanDevice->dev);
+    vkDeviceWaitIdle(device->dev);
 
     camera.updateAspectRatio((float)width / (float)height);
     viewChanged();
@@ -880,7 +721,7 @@ void VulkanExampleBase::windowResize()
     prepared = true;
 }
 
-void VulkanExampleBase::handleMouseMove(int32_t x, int32_t y)
+void vks::VkEngine::handleMouseMove(int32_t x, int32_t y)
 {
     int32_t dx = (int32_t)mousePos.x - x;
     int32_t dy = (int32_t)mousePos.y - y;
@@ -908,26 +749,7 @@ void VulkanExampleBase::handleMouseMove(int32_t x, int32_t y)
     mousePos = glm::vec2((float)x, (float)y);
 }
 
-void VulkanExampleBase::handleMouseButtonDown(int buttonIndex) {}
+void vks::VkEngine::handleMouseButtonDown(int buttonIndex) {}
 
-void VulkanExampleBase::handleMouseButtonUp(int buttonIndex) {}
+void vks::VkEngine::handleMouseButtonUp(int buttonIndex) {}
 
-void VulkanExampleBase::initSwapchain()
-{
-#if defined(_WIN32)
-    swapChain.initSurface(windowInstance, window);
-#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-    swapChain.initSurface(androidApp->window);
-#elif defined(_DIRECT2DISPLAY)
-    swapChain.initSurface(width, height);
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
-    swapChain.initSurface(display, surface);
-#elif defined(VK_USE_PLATFORM_XCB_KHR)
-    swapChain.initSurface(connection, window);
-#endif
-}
-
-void VulkanExampleBase::setupSwapChain()
-{
-    swapChain.create(&width, &height, settings.vsync);
-}
