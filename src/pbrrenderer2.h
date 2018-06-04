@@ -5,7 +5,8 @@
 #include "VulkanTexture.hpp"
 #include "VulkanglTFModel.hpp"
 
-class pbrRenderer : public vkRenderer
+
+class pbrRenderer : public vks::vkRenderer
 {
     void generateBRDFLUT();
     void generateCubemaps();
@@ -37,9 +38,9 @@ public:
     pbrRenderer ();
     virtual ~pbrRenderer();
 
-    virtual void create(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
+    virtual void create(vks::VulkanDevice* _device, vks::VulkanSwapChain *_swapChain,
                         VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
-                        VulkanExampleBase::UniformBuffers& _sharedUbos);
+                        vks::VkEngine::UniformBuffers& _sharedUbos);
     virtual void destroy();
 
     void renderPrimitive(vkglTF::Primitive &primitive, VkCommandBuffer commandBuffer);

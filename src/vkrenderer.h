@@ -1,74 +1,77 @@
 #pragma once
 
 #include "VkEngine.h"
+#include "VulkanSwapChain.hpp"
 
 #define DRAW_FENCE_TIMEOUT 99900000
 
-class vkRenderer
-{
-protected:
+namespace vks {
 
-    bool prepared = false;
+    class vkRenderer
+    {
+    protected:
 
-    VkSampleCountFlagBits       sampleCount;
+        bool prepared = false;
 
-    vks::VulkanDevice*          device;
-    VulkanSwapChain*            swapChain;
-    VkRenderPass                renderPass;
-    std::vector<VkFramebuffer>  frameBuffers;
-    VulkanExampleBase::UniformBuffers sharedUBOs;
+        VkSampleCountFlagBits       sampleCount;
 
-    vks::ShadingContext*        shadingCtx;
+        vks::VulkanDevice*          device;
+        vks::VulkanSwapChain*       swapChain;
+        VkRenderPass                renderPass;
+        std::vector<VkFramebuffer>  frameBuffers;
+        vks::VkEngine::UniformBuffers sharedUBOs;
 
-    VkCommandPool               commandPool;
-    std::vector<VkCommandBuffer>cmdBuffers;
+        vks::ShadingContext*        shadingCtx;
 
-    VkDescriptorSet         descriptorSet;
+        VkCommandPool               commandPool;
+        std::vector<VkCommandBuffer>cmdBuffers;
 
-    std::vector<VkFence>    fences;
-    VkSubmitInfo            submitInfo;
+        VkDescriptorSet         descriptorSet;
 
-    VkPipeline              pipeline;
-    VkPipelineLayout        pipelineLayout;
+        std::vector<VkFence>    fences;
+        VkSubmitInfo            submitInfo;
 
-    VkFormat                depthFormat;
+        VkPipeline              pipeline;
+        VkPipelineLayout        pipelineLayout;
 
-    std::vector<float>	vertices;
-    vks::Buffer			vertexBuff;
-    uint32_t			vBufferSize = 10000 * sizeof(float) * 6;
+        VkFormat                depthFormat;
 
-    virtual void prepare();
-    virtual void prepareRenderPass();
-    virtual void prepareFrameBuffer();
-    virtual void configurePipelineLayout();
-    virtual void loadRessources();
-    virtual void freeRessources();
-    virtual void prepareDescriptors();
-    virtual void preparePipeline();
+        std::vector<float>	vertices;
+        vks::Buffer			vertexBuff;
+        uint32_t			vBufferSize = 10000 * sizeof(float) * 6;
 
-public:
-    VkSemaphore         drawComplete;
-    uint32_t			vertexCount = 0;
-    uint32_t			sdffVertexCount = 0;
+        virtual void prepare();
+        virtual void prepareRenderPass();
+        virtual void prepareFrameBuffer();
+        virtual void configurePipelineLayout();
+        virtual void loadRessources();
+        virtual void freeRessources();
+        virtual void prepareDescriptors();
+        virtual void preparePipeline();
 
-    vkRenderer ();
-    virtual ~vkRenderer();
+    public:
+        VkSemaphore         drawComplete;
+        uint32_t			vertexCount = 0;
+        uint32_t			sdffVertexCount = 0;
 
-    virtual void create (vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
-                                           VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
-                                           VulkanExampleBase::UniformBuffers& _sharedUbos);
-    virtual void destroy();
+        vkRenderer ();
+        virtual ~vkRenderer();
 
-    virtual void buildCommandBuffer ();
-    virtual void draw(VkCommandBuffer cmdBuff);
+        virtual void create (ptrVkDev _device, VulkanSwapChain *_swapChain,
+                                               VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
+                                               VkEngine::UniformBuffers& _sharedUbos);
+        virtual void destroy();
 
-    void submit (VkQueue queue, VkSemaphore *waitSemaphore, uint32_t waitSemaphoreCount);
+        virtual void buildCommandBuffer ();
+        virtual void draw(VkCommandBuffer cmdBuff);
 
-    void drawLine(const glm::vec3& from,const glm::vec3& to,const glm::vec3& fromColor, const glm::vec3& toColor);
-    void drawLine(const glm::vec3& from,const glm::vec3& to,const glm::vec3& color);
+        void submit (VkQueue queue, VkSemaphore *waitSemaphore, uint32_t waitSemaphoreCount);
 
-    virtual void flush();
-    virtual void clear();
-};
+        void drawLine(const glm::vec3& from,const glm::vec3& to,const glm::vec3& fromColor, const glm::vec3& toColor);
+        void drawLine(const glm::vec3& from,const glm::vec3& to,const glm::vec3& color);
 
+        virtual void flush();
+        virtual void clear();
+    };
+}
 

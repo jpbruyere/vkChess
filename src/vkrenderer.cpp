@@ -3,11 +3,11 @@
 
 const VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-vkRenderer::vkRenderer () {}
+vks::vkRenderer::vkRenderer () {}
 
-void vkRenderer::create(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
+void vks::vkRenderer::create(ptrVkDev _device, VulkanSwapChain *_swapChain,
                    VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
-                   VulkanExampleBase::UniformBuffers& _sharedUbos) {
+                   VkEngine::UniformBuffers& _sharedUbos) {
     swapChain   = _swapChain;
     device      = _device;
     depthFormat = _depthFormat;
@@ -16,13 +16,13 @@ void vkRenderer::create(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
 
     prepare();
 }
-vkRenderer::~vkRenderer()
+vks::vkRenderer::~vkRenderer()
 {
     if (prepared)
         destroy();
 }
 
-void vkRenderer::destroy() {
+void vks::vkRenderer::destroy() {
     prepared = false;
 
     freeRessources();
@@ -44,7 +44,7 @@ void vkRenderer::destroy() {
     vkDestroyPipelineLayout (device->dev, pipelineLayout, VK_NULL_HANDLE);
     vkDestroyCommandPool    (device->dev, commandPool, VK_NULL_HANDLE);
 }
-void vkRenderer::prepare() {
+void vks::vkRenderer::prepare() {
     fences.resize(swapChain->imageCount);
     for (uint i=0; i<swapChain->imageCount; i++)
         fences[i] = device->createFence(true);
@@ -80,11 +80,11 @@ void vkRenderer::prepare() {
     prepared = true;
 }
 
-void vkRenderer::prepareRenderPass()
+void vks::vkRenderer::prepareRenderPass()
 {
     VkAttachmentDescription attachments[] = {
         {0, //color
-            swapChain->colorFormat, sampleCount,
+            swapChain->infos.imageFormat, sampleCount,
             VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
             VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -94,7 +94,7 @@ void vkRenderer::prepareRenderPass()
            VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
         },{0,// resolve
-           swapChain->colorFormat, VK_SAMPLE_COUNT_1_BIT,
+           swapChain->infos.imageFormat, VK_SAMPLE_COUNT_1_BIT,
            VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE,
            VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
@@ -142,10 +142,10 @@ void vkRenderer::prepareRenderPass()
 
     prepareFrameBuffer();
 }
-void vkRenderer::prepareFrameBuffer () {
+void vks::vkRenderer::prepareFrameBuffer () {
     VkImageView attachments[] = {
-        swapChain->multisampleTarget->color.view,
-        swapChain->multisampleTarget->depth.view,
+        //swapChain->multisampleTarget->color.view,
+        //swapChain->multisampleTarget->depth.view,
         VK_NULL_HANDLE
     };
 
@@ -153,8 +153,8 @@ void vkRenderer::prepareFrameBuffer () {
     frameBufferCI.renderPass        = renderPass;
     frameBufferCI.attachmentCount   = (sampleCount > VK_SAMPLE_COUNT_1_BIT) ? 3 : 2;
     frameBufferCI.pAttachments      = attachments;
-    frameBufferCI.width             = swapChain->extent.width;
-    frameBufferCI.height            = swapChain->extent.height;
+    frameBufferCI.width             = swapChain->infos.imageExtent.width;
+    frameBufferCI.height            = swapChain->infos.imageExtent.height;
     frameBufferCI.layers            = 1;
 
     frameBuffers.resize(swapChain->imageCount);
@@ -165,7 +165,7 @@ void vkRenderer::prepareFrameBuffer () {
     }
 }
 
-void vkRenderer::configurePipelineLayout () {
+void vks::vkRenderer::configurePipelineLayout () {
     shadingCtx = new vks::ShadingContext (device);
 
     shadingCtx->addDescriptorSetLayout({{ 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr }});
@@ -174,7 +174,7 @@ void vkRenderer::configurePipelineLayout () {
 
 }
 //place here specific renderer resources
-void vkRenderer::loadRessources() {
+void vks::vkRenderer::loadRessources() {
     vertexBuff.create (device,
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -183,17 +183,17 @@ void vkRenderer::loadRessources() {
     vertexBuff.map();
 }
 //and free here
-void vkRenderer::freeRessources() {
+void vks::vkRenderer::freeRessources() {
     vertexBuff.unmap();
     vertexBuff.destroy();
 }
-void vkRenderer::prepareDescriptors()
+void vks::vkRenderer::prepareDescriptors()
 {
     descriptorSet = shadingCtx->allocateDescriptorSet(0);
 
     shadingCtx->updateDescriptorSet (descriptorSet,{{0,0,&sharedUBOs.matrices}});
 }
-void vkRenderer::preparePipeline()
+void vks::vkRenderer::preparePipeline()
 {
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
     inputAssemblyStateCI.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
@@ -288,7 +288,7 @@ void vkRenderer::preparePipeline()
     for (auto shaderStage : shaderStages)
         vkDestroyShaderModule(device->dev, shaderStage.module, nullptr);
 }
-void vkRenderer::draw(VkCommandBuffer cmdBuff) {
+void vks::vkRenderer::draw(VkCommandBuffer cmdBuff) {
     VkDeviceSize offsets[1] = { 0 };
 
     vkCmdBindPipeline (cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
@@ -296,7 +296,7 @@ void vkRenderer::draw(VkCommandBuffer cmdBuff) {
     vkCmdBindVertexBuffers (cmdBuff, 0, 1, &vertexBuff.buffer, offsets);
     vkCmdDraw (cmdBuff,  vertexCount, 1, 0, 0);
 }
-void vkRenderer::buildCommandBuffer (){
+void vks::vkRenderer::buildCommandBuffer (){
     prepared = false;
 
     VkCommandBufferBeginInfo cmdBufInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
@@ -311,7 +311,7 @@ void vkRenderer::buildCommandBuffer (){
     renderPassBeginInfo.renderPass = renderPass;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
-    renderPassBeginInfo.renderArea.extent = swapChain->extent;
+    renderPassBeginInfo.renderArea.extent = swapChain->infos.imageExtent;
     renderPassBeginInfo.clearValueCount = (sampleCount > VK_SAMPLE_COUNT_1_BIT) ? 3 : 2;
     renderPassBeginInfo.pClearValues = clearValues;
 
@@ -323,14 +323,14 @@ void vkRenderer::buildCommandBuffer (){
         vkCmdBeginRenderPass(cmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         VkViewport viewport{};
-        viewport.width = (float)swapChain->extent.width;
-        viewport.height = (float)swapChain->extent.height;
+        viewport.width = (float)swapChain->infos.imageExtent.width;
+        viewport.height = (float)swapChain->infos.imageExtent.height;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(cmdBuffers[i], 0, 1, &viewport);
 
         VkRect2D scissor{};
-        scissor.extent = { swapChain->extent.width, swapChain->extent.height};
+        scissor.extent = { swapChain->infos.imageExtent.width, swapChain->infos.imageExtent.height};
         vkCmdSetScissor(cmdBuffers[i], 0, 1, &scissor);
 
         draw (cmdBuffers[i]);
@@ -341,7 +341,7 @@ void vkRenderer::buildCommandBuffer (){
     prepared = true;
 }
 
-void vkRenderer::submit (VkQueue queue, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount) {
+void vks::vkRenderer::submit (VkQueue queue, VkSemaphore* waitSemaphore, uint32_t waitSemaphoreCount) {
     if (!prepared)
         return;
     submitInfo.pCommandBuffers		= &cmdBuffers[swapChain->currentBuffer];
@@ -353,19 +353,19 @@ void vkRenderer::submit (VkQueue queue, VkSemaphore* waitSemaphore, uint32_t wai
 
     VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fences[swapChain->currentBuffer]));
 }
-void vkRenderer::clear(){
+void vks::vkRenderer::clear(){
     vertices.clear();
     vertexCount = 0;
 }
 
-void vkRenderer::flush(){
+void vks::vkRenderer::flush(){
     VK_CHECK_RESULT(vkWaitForFences(device->dev, 1, &fences[swapChain->currentBuffer], VK_TRUE, DRAW_FENCE_TIMEOUT));
     memcpy(vertexBuff.mapped, vertices.data(), vertices.size() * sizeof(float));
     vertexCount = vertices.size() / 6;
     buildCommandBuffer();
 }
 
-void vkRenderer::drawLine(const glm::vec3& from, const glm::vec3& to,
+void vks::vkRenderer::drawLine(const glm::vec3& from, const glm::vec3& to,
                           const glm::vec3& fromColor, const glm::vec3& toColor)
 {
     vertices.push_back(from.x);
@@ -385,7 +385,7 @@ void vkRenderer::drawLine(const glm::vec3& from, const glm::vec3& to,
     vertices.push_back(toColor.z);
 }
 
-void vkRenderer::drawLine(const glm::vec3& from, const glm::vec3& to, const glm::vec3& color)
+void vks::vkRenderer::drawLine(const glm::vec3& from, const glm::vec3& to, const glm::vec3& color)
 {
     drawLine(from,to,color,color);
 }

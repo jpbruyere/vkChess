@@ -4,9 +4,9 @@ pbrRenderer::pbrRenderer () : vkRenderer()
 {
 }
 
-void pbrRenderer::create(vks::VulkanDevice* _device, VulkanSwapChain *_swapChain,
+void pbrRenderer::create(vks::VulkanDevice* _device, vks::VulkanSwapChain *_swapChain,
                      VkFormat _depthFormat, VkSampleCountFlagBits _sampleCount,
-                     VulkanExampleBase::UniformBuffers& _sharedUbos) {
+                     vks::VkEngine::UniformBuffers& _sharedUbos) {
     vkRenderer::create(_device,_swapChain,_depthFormat,_sampleCount,_sharedUbos);
 }
 
@@ -460,8 +460,8 @@ void pbrRenderer::generateBRDFLUT()
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
-    scissor.extent.width = swapChain->extent.width;
-    scissor.extent.height = swapChain->extent.height;
+    scissor.extent.width = swapChain->infos.imageExtent.width;
+    scissor.extent.height = swapChain->infos.imageExtent.height;
 
     vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
     vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
@@ -869,7 +869,7 @@ void pbrRenderer::generateCubemaps()
         VkCommandBuffer cmdBuf = device->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
 
         VkViewport  viewport = {0, 0, (float)dim, (float)dim, 0.0f, 1.0f};
-        VkRect2D    scissor  = {{}, {swapChain->extent.width, swapChain->extent.height}};
+        VkRect2D    scissor  = {{}, {swapChain->infos.imageExtent.width, swapChain->infos.imageExtent.height}};
 
         vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
         vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
