@@ -44,7 +44,6 @@ namespace vks {
         uint32_t    destWidth;
         uint32_t    destHeight;
 
-        void        windowResize();
         std::string getWindowTitle();
 
         PFN_vkCreateDebugReportCallbackEXT  vkCreateDebugReportCallback;
@@ -60,12 +59,14 @@ namespace vks {
         RenderTarget*           renderTarget;
         std::string     title = "Vulkan Example";
         std::string     name = "vulkanExample";
+
+        virtual void windowResize();
     public:
         static std::vector<const char*> args;
 
-        VkInstance          instance;
-        ptrVkDev       device;
-        VkSurfaceKHR        surface;
+        VkInstance      instance;
+        ptrVkDev        device;
+        VkSurfaceKHR    surface;
 
 
         uint32_t    lastFPS     = 0;
@@ -112,17 +113,6 @@ namespace vks {
 
         bool mouseButtons[3] = {false,false,false};
 
-    #if defined(VK_USE_PLATFORM_XCB_KHR)
-
-        xcb_connection_t *connection;
-        xcb_screen_t *screen;
-        //xcb_window_t window;
-        xcb_intern_atom_reply_t *atom_wm_delete_window;
-    #endif
-
-    #if defined(VK_USE_PLATFORM_XCB_KHR)
-        void handleEvent(const xcb_generic_event_t *event);
-    #endif
 
         VkEngine(uint32_t width, uint32_t height,
                  VkPhysicalDeviceType preferedGPU = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
@@ -132,8 +122,8 @@ namespace vks {
 
         virtual void render() = 0;
         virtual void viewChanged();
-        virtual void keyDown(uint32_t);
-        virtual void keyUp(uint32_t);
+        virtual void keyDown(uint32_t key);
+        virtual void keyUp(uint32_t key);
         virtual void keyPressed(uint32_t key);
         virtual void handleMouseMove(int32_t x, int32_t y);
         virtual void handleMouseButtonDown(int buttonIndex);

@@ -11,7 +11,7 @@
 #pragma once
 
 #include "vke.h"
-
+#include "rendertarget.hpp"
 namespace vks {
 
     typedef struct _SwapChainBuffers {
@@ -44,6 +44,8 @@ namespace vks {
         VkSemaphore                 presentCompleteSemaphore;
         VkPresentInfoKHR            presentInfo;
         VkFormat                    depthFormat;
+
+        std::vector<RenderTarget*>  boundRenderTargets;
 
         //RenderTarget* multisampleTarget;
         ptrTexture depthStencil;

@@ -6,7 +6,43 @@
 
 vks::RenderTarget::RenderTarget(ptrSwapchain _swapChain, VkSampleCountFlagBits _samples) {
     swapChain = _swapChain;
+    swapChain->boundRenderTargets.push_back (this);
     samples = _samples;
+
+    createAttachments();
+    createDefaultRenderPass();
+    createFrameBuffers();
+}
+
+vks::RenderTarget::~RenderTarget () {
+    swapChain->boundRenderTargets.erase(std::remove(swapChain->boundRenderTargets.begin(),
+                                                    swapChain->boundRenderTargets.end(), this), swapChain->boundRenderTargets.end());
+
+    for (uint32_t i = 0; i < frameBuffers.size(); i++)
+        vkDestroyFramebuffer(swapChain->vke->device->dev, frameBuffers[i], nullptr);
+
+    vkDestroyRenderPass     (swapChain->vke->device->dev, renderPass, VK_NULL_HANDLE);
+
+    for(uint i=0; i<attachments.size(); i++)
+        attachments[i].destroy();
+}
+uint32_t vks::RenderTarget::getWidth() {
+    return attachments[0].infos.extent.width;
+}
+uint32_t vks::RenderTarget::getHeight() {
+    return attachments[0].infos.extent.height;
+}
+
+void vks::RenderTarget::updateSize () {
+    for (uint32_t i = 0; i < frameBuffers.size(); i++)
+        vkDestroyFramebuffer(swapChain->vke->device->dev, frameBuffers[i], nullptr);
+    for(uint i=0; i<attachments.size(); i++)
+        attachments[i].destroy();
+
+    createAttachments();
+}
+
+void vks::RenderTarget::createAttachments() {
     if (samples > VK_SAMPLE_COUNT_1_BIT) {
         attachments.resize(3);
         presentableAttachment = 2;
@@ -33,19 +69,7 @@ vks::RenderTarget::RenderTarget(ptrSwapchain _swapChain, VkSampleCountFlagBits _
     }
 }
 
-vks::RenderTarget::~RenderTarget () {
-    for(uint i=0; i<attachments.size(); i++) {
-        attachments[i].destroy();
-    }
-}
-uint32_t vks::RenderTarget::getWidth() {
-    return attachments[0].infos.extent.width;
-}
-uint32_t vks::RenderTarget::getHeight() {
-    return attachments[0].infos.extent.height;
-}
-
-void vks::RenderTarget::createFrameBuffers(VkRenderPass renderPass, std::vector<VkFramebuffer>& frameBuffers)
+void vks::RenderTarget::createFrameBuffers()
 {
     std::vector<VkImageView> views;
     views.resize(attachments.size());
@@ -70,8 +94,7 @@ void vks::RenderTarget::createFrameBuffers(VkRenderPass renderPass, std::vector<
     }
 }
 
-VkRenderPass vks::RenderTarget::createDefaultRenderPass () {
-    VkRenderPass renderPass;
+void vks::RenderTarget::createDefaultRenderPass () {
     VkAttachmentDescription rpAttachments[] = {
         {0, //color
             attachments[0].infos.format, samples,
@@ -124,5 +147,4 @@ VkRenderPass vks::RenderTarget::createDefaultRenderPass () {
     renderPassCI.dependencyCount    = 2;
     renderPassCI.pDependencies      = dependencies;
     VK_CHECK_RESULT(vkCreateRenderPass(swapChain->vke->device->dev, &renderPassCI, nullptr, &renderPass));
-    return renderPass;
 }

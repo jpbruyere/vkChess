@@ -24,9 +24,6 @@ void vks::vkRenderer::destroy() {
 
     freeRessources();
 
-    for (uint32_t i = 0; i < frameBuffers.size(); i++)
-        vkDestroyFramebuffer(device->dev, frameBuffers[i], nullptr);
-
     vkFreeCommandBuffers(device->dev, commandPool, cmdBuffers.size(), cmdBuffers.data());
 
     for (uint32_t i = 0; i < fences.size(); i++)
@@ -36,7 +33,6 @@ void vks::vkRenderer::destroy() {
 
     delete shadingCtx;
 
-    vkDestroyRenderPass     (device->dev, renderPass, VK_NULL_HANDLE);
     vkDestroyPipeline       (device->dev, pipeline, VK_NULL_HANDLE);
     vkDestroyPipelineLayout (device->dev, pipelineLayout, VK_NULL_HANDLE);
     vkDestroyCommandPool    (device->dev, commandPool, VK_NULL_HANDLE);
@@ -61,12 +57,12 @@ void vks::vkRenderer::prepare() {
     cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     VK_CHECK_RESULT(vkCreateCommandPool(device->dev, &cmdPoolInfo, nullptr, &commandPool));
 
-    cmdBuffers.resize(frameBuffers.size());
+    cmdBuffers.resize(renderTarget->frameBuffers.size());
 
     VkCommandBufferAllocateInfo cmdBufAllocateInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
     cmdBufAllocateInfo.commandPool          = commandPool;
     cmdBufAllocateInfo.level                = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cmdBufAllocateInfo.commandBufferCount   = frameBuffers.size();
+    cmdBufAllocateInfo.commandBufferCount   = renderTarget->frameBuffers.size();
     VK_CHECK_RESULT(vkAllocateCommandBuffers(device->dev, &cmdBufAllocateInfo, cmdBuffers.data()));
 
     configurePipelineLayout();
@@ -79,9 +75,7 @@ void vks::vkRenderer::prepare() {
 
 void vks::vkRenderer::prepareRendering()
 {
-    renderPass = renderTarget->createDefaultRenderPass();
 
-    renderTarget->createFrameBuffers (renderPass, frameBuffers);
 }
 
 void vks::vkRenderer::configurePipelineLayout () {
@@ -186,7 +180,7 @@ void vks::vkRenderer::preparePipeline()
 
     VkGraphicsPipelineCreateInfo pipelineCI = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
     pipelineCI.layout = pipelineLayout;
-    pipelineCI.renderPass = renderPass;
+    pipelineCI.renderPass = renderTarget->renderPass;
     pipelineCI.pInputAssemblyState = &inputAssemblyStateCI;
     pipelineCI.pVertexInputState = &vertexInputStateCI;
     pipelineCI.pRasterizationState = &rasterizationStateCI;
@@ -215,6 +209,21 @@ void vks::vkRenderer::draw(VkCommandBuffer cmdBuff) {
     vkCmdBindVertexBuffers (cmdBuff, 0, 1, &vertexBuff.buffer, offsets);
     vkCmdDraw (cmdBuff,  vertexCount, 1, 0, 0);
 }
+void vks::vkRenderer::rebuildCommandBuffer () {
+    prepared = false;
+    vkDeviceWaitIdle(device->dev);
+    vkFreeCommandBuffers(device->dev, commandPool, cmdBuffers.size(), cmdBuffers.data());
+    cmdBuffers.resize(renderTarget->frameBuffers.size());
+
+    VkCommandBufferAllocateInfo cmdBufAllocateInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    cmdBufAllocateInfo.commandPool          = commandPool;
+    cmdBufAllocateInfo.level                = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmdBufAllocateInfo.commandBufferCount   = renderTarget->frameBuffers.size();
+    VK_CHECK_RESULT(vkAllocateCommandBuffers(device->dev, &cmdBufAllocateInfo, cmdBuffers.data()));
+
+    buildCommandBuffer();
+    vkDeviceWaitIdle(device->dev);
+}
 void vks::vkRenderer::buildCommandBuffer (){
     prepared = false;
 
@@ -227,7 +236,7 @@ void vks::vkRenderer::buildCommandBuffer (){
     };
 
     VkRenderPassBeginInfo renderPassBeginInfo = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-    renderPassBeginInfo.renderPass = renderPass;
+    renderPassBeginInfo.renderPass = renderTarget->renderPass;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
     renderPassBeginInfo.renderArea.extent = renderTarget->swapChain->infos.imageExtent;
@@ -236,7 +245,7 @@ void vks::vkRenderer::buildCommandBuffer (){
 
     for (size_t i = 0; i < cmdBuffers.size(); ++i)
     {
-        renderPassBeginInfo.framebuffer = frameBuffers[i];
+        renderPassBeginInfo.framebuffer = renderTarget->frameBuffers[i];
         VK_CHECK_RESULT(vkBeginCommandBuffer(cmdBuffers[i], &cmdBufInfo));
 
         vkCmdBeginRenderPass(cmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
