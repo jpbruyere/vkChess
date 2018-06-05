@@ -55,8 +55,8 @@ namespace vks {
         vks::vkPhyInfo      phyInfos;
         GLFWwindow*         window;
 
-        struct VulkanSwapChain* swapChain;
-        RenderTarget*           renderTarget;
+        ptrSwapchain        swapChain;
+        RenderTarget*       renderTarget;
         std::string     title = "Vulkan Example";
         std::string     name = "vulkanExample";
 

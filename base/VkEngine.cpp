@@ -277,7 +277,8 @@ void vks::VkEngine::start () {
     swapChain = new VulkanSwapChain (this, false);
     swapChain->create (width, height);
 
-    renderTarget = new RenderTarget(swapChain, settings.sampleCount);
+    renderTarget = new RenderTarget(device, settings.sampleCount);
+    renderTarget->createDefaultPresentableTarget (swapChain);
 
     prepareUniformBuffers();
 
