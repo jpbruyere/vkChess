@@ -269,15 +269,6 @@ vks::VkEngine::~VkEngine()
     //    vkDestroyDebugReportCallback(instance, debugReportCallback, nullptr);
 
     vkDestroyInstance (instance, VK_NULL_HANDLE);
-
-    return;
-
-//    // Clean up Vulkan resources
-
-//    vkDestroyRenderPass     (vulkanDevice->dev, renderPass, nullptr);
-//    vkDestroyFramebuffer    (vulkanDevice->dev, frameBuffer, nullptr);
-
-
 }
 
 void vks::VkEngine::start () {
@@ -604,9 +595,6 @@ void vks::VkEngine::updateParams()
     sharedUBOs.params.copyTo(&lightingParams, sizeof(lightingParams));
 }
 
-
-
-
 void vks::VkEngine::windowResize()
 {
     if (!prepared)
@@ -615,12 +603,7 @@ void vks::VkEngine::windowResize()
 
     vkDeviceWaitIdle(device->dev);
 
-//    int w, h;
-//    glfwGetWindowSize(window, &w, &h);
-//    width = (uint32_t)w;
-//    height = (uint32_t)h;
-
-    swapChain->create(width, height);
+    swapChain->create (width, height);
 
     vkDeviceWaitIdle(device->dev);
 

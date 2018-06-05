@@ -479,12 +479,6 @@ public:
 
 
         if (p) {
-            if (p->type == King && animate) {//reset case color if king was in check state
-                glm::vec4 c = getCaseLight (orig);
-                if (c.x > 0.f)
-                    setCaseLight(p->position, glm::vec4(0,c.y,c.z,c.w));
-            }
-
             if (p->type == King && abs(orig.x - dest.x)>1){//rocking
                 //move tower
                 if (dest.x == 6)//right tower
@@ -795,8 +789,10 @@ public:
             subCaseLight(validMoves[i], validMoveColor);
         validMoves.clear();
 
-        if (!kingIsSafe(currentPlayer))
-            addCaseLight(getKing(currentPlayer)->position, checkColor);
+        if (kingIsSafe(currentPlayer))
+            setCaseLight(getKing(currentPlayer)->position, glm::vec4(0));
+        else
+            setCaseLight(getKing(currentPlayer)->position, checkColor);
 
         if (playerIsAi[currentPlayer]){
             sendPositionsCmd();
@@ -988,15 +984,15 @@ public:
     }
     virtual void keyPressed(uint32_t key) {
         switch (key) {
-        case 42://g: restart game
+        case GLFW_KEY_G://g: restart game
             break;
-        case 27://r: redo last undo
+        case GLFW_KEY_R://r: redo last undo
             startGame();
             break;
-        case 30://u: undo last human move
+        case GLFW_KEY_U://u: undo last human move
             undo();
             break;
-        case 43://h
+        case GLFW_KEY_H://h
             toogleHint();
             break;
         default:

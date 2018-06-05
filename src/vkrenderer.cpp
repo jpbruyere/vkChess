@@ -239,7 +239,7 @@ void vks::vkRenderer::buildCommandBuffer (){
     renderPassBeginInfo.renderPass = renderTarget->renderPass;
     renderPassBeginInfo.renderArea.offset.x = 0;
     renderPassBeginInfo.renderArea.offset.y = 0;
-    renderPassBeginInfo.renderArea.extent = renderTarget->swapChain->infos.imageExtent;
+    renderPassBeginInfo.renderArea.extent = {renderTarget->width, renderTarget->height};
     renderPassBeginInfo.clearValueCount = (renderTarget->samples > VK_SAMPLE_COUNT_1_BIT) ? 3 : 2;
     renderPassBeginInfo.pClearValues = clearValues;
 
@@ -251,14 +251,14 @@ void vks::vkRenderer::buildCommandBuffer (){
         vkCmdBeginRenderPass(cmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         VkViewport viewport{};
-        viewport.width = (float)renderTarget->getWidth();
-        viewport.height = (float)renderTarget->getHeight();
+        viewport.width = (float)renderTarget->width;
+        viewport.height = (float)renderTarget->height;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(cmdBuffers[i], 0, 1, &viewport);
 
         VkRect2D scissor{};
-        scissor.extent = { renderTarget->getWidth(), renderTarget->getHeight()};
+        scissor.extent = {renderTarget->width, renderTarget->height};
         vkCmdSetScissor(cmdBuffers[i], 0, 1, &scissor);
 
         draw (cmdBuffers[i]);

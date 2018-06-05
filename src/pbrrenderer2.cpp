@@ -454,8 +454,8 @@ void pbrRenderer::generateBRDFLUT()
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
-    scissor.extent.width = renderTarget->getWidth();
-    scissor.extent.height = renderTarget->getHeight();
+    scissor.extent.width = renderTarget->width;
+    scissor.extent.height = renderTarget->height;
 
     vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
     vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
@@ -863,7 +863,7 @@ void pbrRenderer::generateCubemaps()
         VkCommandBuffer cmdBuf = device->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
 
         VkViewport  viewport = {0, 0, (float)dim, (float)dim, 0.0f, 1.0f};
-        VkRect2D    scissor  = {{}, {renderTarget->getWidth(), renderTarget->getHeight()}};
+        VkRect2D    scissor  = {{}, {renderTarget->width, renderTarget->height}};
 
         vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
         vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
