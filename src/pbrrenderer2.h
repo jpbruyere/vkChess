@@ -25,6 +25,8 @@ public:
 
     VkDescriptorSet         dsScene;
 
+    vks::Texture            fullScreenTex;
+
     struct Textures {
         vks::TextureCubeMap environmentCube;
         vks::Texture2D      lutBrdf;

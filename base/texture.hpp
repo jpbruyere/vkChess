@@ -24,7 +24,9 @@ namespace vks
                         VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                         VkSharingMode sharingMode = VK_SHARING_MODE_EXCLUSIVE);
         Texture ();
-        Texture (ptrVkDev  _device);
+        Texture (ptrVkDev  _device, VkFormat _format, VkImage importedImg = VK_NULL_HANDLE,
+                 uint32_t _width = 0, uint32_t height = 0, VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT,
+                 uint32_t  mipLevels = 1, uint32_t arrayLayers = 1);
         Texture (ptrVkDev  _device,
                         VkImageType imageType, VkFormat format, uint32_t width, uint32_t height,
                         VkImageUsageFlags usage, VkMemoryPropertyFlags memProps = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,

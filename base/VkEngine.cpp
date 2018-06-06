@@ -272,7 +272,14 @@ vks::VkEngine::~VkEngine()
 }
 
 void vks::VkEngine::start () {
-    device = new vks::VulkanDevice (phyInfos);
+    std::vector<const char*> devLayers;
+
+#if DEBUG
+    if (settings.validation)
+        devLayers.push_back ("VK_LAYER_LUNARG_standard_validation");
+#endif
+
+    device = new vks::VulkanDevice (phyInfos, devLayers);
 
     swapChain = new VulkanSwapChain (this, false);
     swapChain->create (width, height);
@@ -413,8 +420,10 @@ void vks::VkEngine::createInstance (const std::string& app_name, std::vector<con
 
 
     std::vector<const char*> enabledLayers;
+
 #if DEBUG
-    enabledLayers.push_back ("VK_LAYER_LUNARG_standard_validation");
+    if (settings.validation)
+        enabledLayers.push_back ("VK_LAYER_LUNARG_standard_validation");
 #endif
 
     VkInstanceCreateInfo inst_info = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};

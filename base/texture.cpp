@@ -40,8 +40,16 @@ namespace vks
         VK_CHECK_RESULT(vkBindImageMemory(device->dev, image, deviceMemory, 0));
     }
     Texture::Texture (){}
-    Texture::Texture (ptrVkDev  _device){
+    Texture::Texture (ptrVkDev  _device, VkFormat _format, VkImage importedImg, uint32_t width, uint32_t height,
+                      VkSampleCountFlagBits samples, uint32_t mipLevels, uint32_t arrayLayers){
         device = _device;
+        image = importedImg;
+        infos.format = _format;
+        infos.extent = {width, height, 1};
+        infos.imageType = VK_IMAGE_TYPE_2D;
+        infos.samples = samples;
+        infos.mipLevels = mipLevels;
+        infos.arrayLayers = arrayLayers;
     }
     Texture::Texture (ptrVkDev  _device,
                  VkImageType imageType, VkFormat format, uint32_t width, uint32_t height,

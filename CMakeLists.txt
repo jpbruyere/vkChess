@@ -35,6 +35,10 @@ include_directories(external/gli)
 include_directories(external/glfw)
 include_directories(base)
 
+SET(VKVG_BUILD_TESTS off)
+add_subdirectory	(external/vkvg)
+include_directories	(external/vkvg/include)
+
 
 OPTION(USE_D2D_WSI "Build the project using Direct to Display swapchain" OFF)
 OPTION(USE_WAYLAND_WSI "Build the project using Wayland swapchain" OFF)
@@ -160,7 +164,7 @@ if(GLSLC)
 		SET(SHADER_OUTPUTS ${SHADER_OUTPUTS} ${shader-output})
 	ENDFOREACH()
 
-	ADD_CUSTOM_TARGET(BuildShaderHeader ALL DEPENDS ${SHADER_OUTPUTS})
+	ADD_CUSTOM_TARGET("${PROJECT_NAME}_BuildShaderHeader" ALL DEPENDS ${SHADER_OUTPUTS})
 endif()
 
 add_subdirectory(base)
@@ -187,6 +191,7 @@ else(WIN32)
 	)
 	TARGET_LINK_LIBRARIES(${PROJECT_NAME}
 		base
+		vkvg
 		#{BULLET_LIBRARIES}
 	)
 endif(WIN32)
