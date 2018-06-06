@@ -19,16 +19,16 @@ namespace vks {
 
         vks::ShadingContext*        shadingCtx;
 
-        VkCommandPool               commandPool;
+        VkCommandPool               commandPool = VK_NULL_HANDLE;
         std::vector<VkCommandBuffer>cmdBuffers;
 
-        VkDescriptorSet         descriptorSet;
+        VkDescriptorSet         descriptorSet   = VK_NULL_HANDLE;
 
         std::vector<VkFence>    fences;
         VkSubmitInfo            submitInfo;
 
-        VkPipeline              pipeline;
-        VkPipelineLayout        pipelineLayout;
+        VkPipeline              pipeline        = VK_NULL_HANDLE;
+        VkPipelineLayout        pipelineLayout  = VK_NULL_HANDLE;
 
         std::vector<float>	vertices;
         vks::Buffer			vertexBuff;
@@ -43,7 +43,7 @@ namespace vks {
         virtual void preparePipeline();
 
     public:
-        VkSemaphore         drawComplete;
+        VkSemaphore         drawComplete    = VK_NULL_HANDLE;
         uint32_t			vertexCount = 0;
         uint32_t			sdffVertexCount = 0;
 

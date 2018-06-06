@@ -132,7 +132,7 @@ namespace vks
             uint32_t compute;
         } queueFamilyIndices;
 
-        VulkanDevice(vkPhyInfo phyInfos);
+        VulkanDevice(vkPhyInfo phyInfos, const std::vector<const char *> &devLayers);
         ~VulkanDevice();
 
         uint32_t getMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties, VkBool32 *memTypeFound = nullptr);

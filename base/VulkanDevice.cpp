@@ -1,6 +1,6 @@
 #include "VulkanDevice.hpp"
 
-vks::VulkanDevice::VulkanDevice(vkPhyInfo phyInfos)
+vks::VulkanDevice::VulkanDevice(vkPhyInfo phyInfos, const std::vector<const char*>& devLayers)
 {
     phy = phyInfos.phy;
 
@@ -13,10 +13,7 @@ vks::VulkanDevice::VulkanDevice(vkPhyInfo phyInfos)
         phyInfos.pQueueInfos[i].pQueuePriorities = phyInfos.qPriorities[i].data();
 
     std::vector<const char*> devExtentions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-    std::vector<const char*> devLayers;
-#if DEBUG
-    devLayers.push_back ("VK_LAYER_LUNARG_standard_validation");
-#endif
+    ;
 
     VkDeviceCreateInfo devInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
     devInfo.queueCreateInfoCount    = (uint32_t)phyInfos.pQueueInfos.size();

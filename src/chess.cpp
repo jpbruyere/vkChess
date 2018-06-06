@@ -33,6 +33,8 @@
 #include <glm/gtx/spline.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 
+#include "vkvg.h"
+
 #define CAPTURE_ZONE_HEIGHT 5
 
 class VkChess : public vks::VkEngine
@@ -69,8 +71,11 @@ public:
         std::queue<glm::mat4> queue;
     };
 
-    vks::vkRenderer*     debugRenderer = nullptr;
+    //vks::vkRenderer*     debugRenderer = nullptr;
     pbrRenderer*   sceneRenderer = nullptr;
+
+    VkvgDevice  vkvgDev;
+    VkvgSurface surf = NULL;
 
 
     VkChess() : VkEngine(1024, 768, VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
@@ -83,7 +88,7 @@ public:
         camera.setRotation({ 42.0f, 0.0f, 0.0f });
         camera.setPosition({ .0f, -12.f, -15.f });
 
-        settings.validation = true;
+        settings.validation = false;
 
         phyInfos.enabledFeatures.samplerAnisotropy
                 = phyInfos.features.samplerAnisotropy;
@@ -92,7 +97,16 @@ public:
 
     ~VkChess()
     {
-        delete(debugRenderer);
+        vkDeviceWaitIdle        (device->dev);
+
+        for (uint i=0; i<2; i++)
+            for (uint j=0; j<6; j++)
+                vkvg_surface_destroy(piecesImgs[i][j]);
+
+        vkvg_surface_destroy    (surf);
+        vkvg_device_destroy     (vkvgDev);
+
+        //delete(debugRenderer);
         delete(sceneRenderer);
     }
 
@@ -104,14 +118,14 @@ public:
 
     Color currentPlayer = White;
     bool gameStarted = false;
-    bool playerIsAi[2] = {false,true};
+    bool playerIsAi[2] = {true,true};
     Piece pieces[32];
     Piece* board[8][8] = {};
 
     int cptWhiteOut = 0;
     int cptBlackOut = 0;
 
-    const int animSteps = 150;
+    int animSteps = 150;
     std::vector <animation> animations;
 
     glm::ivec2 bestMoveOrig = glm::ivec2(-1,-1);
@@ -130,12 +144,114 @@ public:
     char sfOutBuff[1024];
     int sfOutBuffPtr=0;
 
-    const char* sfcmdGo = "go movetime 400\n";
+    std::string sfcmdGo = "go movetime 200\n";
     const char* initPosCmd = "position startpos moves ";
     char movesBuffer[40000];
     int previouMovesPtr;
     int movesPtr;
 
+    float angle = 0.f;
+
+    void svg_set_color (VkvgContext ctx, uint32_t c, float alpha) {
+        float a = (c >> 24 & 255) / 255.f;
+        float b = (c >> 16 & 255) / 255.f;
+        float g = (c >> 8 & 255) / 255.f;
+        float r = (c & 255) / 255.f;
+        vkvg_set_source_rgba(ctx,r,g,b,a*alpha);
+    }
+
+    void vkvg_test() {
+        const int x = 300;
+        const int y = 100;
+        VkvgContext ctx = vkvg_create(surf);
+
+        //vkvg_set_source_surface(ctx, piecesImgs[0][0], x, y);
+        for (int i=0; i<32; i++){
+            vkvg_set_source_surface(ctx, piecesImgs[0][0], x+i*50, y);
+            vkvg_paint(ctx);
+        }
+
+
+        vkvg_destroy (ctx);
+    }
+
+    void vkvg_print_fps() {
+        const int x = 10;
+        const int y = 64;
+        VkvgContext ctx = vkvg_create(surf);
+        vkvg_set_operator(ctx,VKVG_OPERATOR_CLEAR);
+        vkvg_rectangle(ctx,x,y-50,160,60);
+        vkvg_fill(ctx);
+        vkvg_set_operator(ctx,VKVG_OPERATOR_OVER);
+        //vkvg_set_source_rgba (ctx, 0.6,0.6,1.0,0.5);
+        //vkvg_fill(ctx);
+        vkvg_move_to(ctx,x+5,y+5);
+        vkvg_set_font_size(ctx,64);
+        vkvg_select_font_face(ctx,"mono");
+        vkvg_set_source_rgba (ctx, 0,0,0,1);
+        vkvg_show_text(ctx, std::to_string(lastFPS).c_str());
+        //vkvg_flush(ctx);
+        vkvg_move_to(ctx,x,y);
+        vkvg_set_source_rgba (ctx, 1,1,1,1);
+        vkvg_show_text(ctx, std::to_string(lastFPS).c_str());
+
+        vkvg_destroy (ctx);
+    }
+    void updateMiniBoard() {
+        vkvg_surface_clear (surf);
+
+        /*vkvg_matrix_t mat;
+        vkvg_matrix_init_translate (&mat, 105,105);
+        vkvg_matrix_rotate(&mat,angle);
+        vkvg_matrix_translate(&mat,-105,-105);*/
+
+
+        VkvgContext ctx = vkvg_create(surf);
+
+        //vkvg_set_matrix(ctx,&mat);
+        const int x = 100;
+        const int y = 150;
+        const int caseSize = 40;
+        const int margin = 5;
+
+        vkvg_set_source_rgba (ctx, 0,0,0,1);
+
+        vkvg_rectangle(ctx, x,y,8*caseSize+2*margin,8*caseSize+2*margin);
+        vkvg_stroke_preserve(ctx);
+        vkvg_set_source_rgba (ctx, 0.8,0.8,0.8,0.3);
+        vkvg_fill(ctx);
+
+        vkvg_rectangle(ctx, x+margin,y+margin,8*caseSize,8*caseSize);
+        vkvg_set_source_rgba (ctx, 0.8,0.8,0.8,0.5);
+        vkvg_fill(ctx);
+
+        //vkvg_set_source_rgba (ctx, 0,0,0,1);
+        //vkvg_move_to(ctx,20,20);
+        vkvg_set_source_rgba (ctx, 0,0,0,0.5);
+        for(int cx=0; cx<4; cx++) {
+            for(int cy=0; cy<8; cy++) {
+                vkvg_rectangle(ctx, x + margin + cx * caseSize * 2 + cy%2 * caseSize,
+                               y + margin + cy * caseSize, caseSize, caseSize);
+            }
+        }
+        vkvg_fill(ctx);
+
+        vkvg_set_source_rgba (ctx, 1,0,0,1);
+        //vkvg_scale(ctx,0.5,0.5);
+        for(uint i=0; i<32; i++) {
+            int cx = pieces[i].position.x * caseSize + x + margin + caseSize/2 - vkvg_surface_get_width(piecesImgs[pieces[i].color][pieces[i].type])/2;// + caseSize / 2;
+            int cy = y + margin + 7*caseSize - pieces[i].position.y * caseSize +2;// + caseSize / 2;
+            vkvg_set_source_surface(ctx, piecesImgs[pieces[i].color][pieces[i].type], cx, cy);
+            vkvg_paint(ctx);
+        }
+
+//        vkvg_select_font_face (ctx, "mono");
+//        vkvg_set_font_size (ctx, 20.0);
+//        vkvg_show_text(ctx, "this is a test");
+
+        vkvg_destroy (ctx);
+        angle+=0.0005f;
+    }
     void update(){
         readStockfishLine();
 
@@ -153,6 +269,9 @@ public:
         }
 
         mod->updateInstancesBuffer();
+
+        vkvg_print_fps();
+        //vkvg_test();
     }
 
     Piece* getPiece (glm::ivec2 pos){
@@ -166,6 +285,7 @@ public:
 
         animation a;
         a.uboIdx = pceIdx;
+        animSteps = std::max(lastFPS/2, 60u);
 
         for (int i = 0; i<=animSteps; i++){
             float t = (float)i / (float)animSteps;
@@ -192,17 +312,24 @@ public:
         if (movesPtr==0)
             return;
         char levelBuf[100];
-        sprintf (levelBuf,"setoption name Skill Level value %d\n",level[currentPlayer]);
-        write(sfWritefd, levelBuf, strlen(levelBuf));
-        write(sfWritefd, movesBuffer, movesPtr-1 );
-        write(sfWritefd, "\n\0", 2 );
-        write(sfWritefd, sfcmdGo , strlen(sfcmdGo));
+        std::stringstream out;
+        out << "setoption name Skill Level value " << std::to_string(level[currentPlayer]) << std::endl;
+        out << std::string(movesBuffer, movesPtr-1) << std::endl;
+        //out << sfcmdGo;
+        //sprintf (levelBuf,"setoption name Skill Level value %d\n",level[currentPlayer]);
+        //write(sfWritefd, levelBuf, strlen(levelBuf));
+        //write(sfWritefd, movesBuffer, movesPtr-1 );
+        //write(sfWritefd, "\n", 1 );
+        //write(sfWritefd, sfcmdGo.c_str() , sfcmdGo.length());
+        std::cout << std::to_string(sfWritefd) << " <= " << out.str();
+        write(sfWritefd, out.str().c_str(), out.tellp());
+
     }
 
     char* getBestMove() {
         getStockFishIsReady();
         sendPositionsCmd();
-        write(sfWritefd, sfcmdGo , strlen(sfcmdGo));
+        write(sfWritefd, sfcmdGo.c_str() , sfcmdGo.length());
     }
 
     bool getStockFishIsReady () {
@@ -253,7 +380,8 @@ public:
         }
         lineBuf[ptr] = 0;
 #if DEBUG
-      //  std::cout << "=> " << lineBuf;
+      std::cout << "=> " << lineBuf;
+      std::flush(std::cout);
 #endif
         if (strncmp (lineBuf, "readyok", 7)==0){
             stockFishIsReady = true;
@@ -287,6 +415,12 @@ public:
             }
 
         }else if (strncmp (lineBuf, "bestmove", 8)==0){
+            if (strncmp(lineBuf+9, "(none)", 6)==0) {
+                return;
+                if (playerIsAi[currentPlayer])
+                    gameStarted = false;
+
+            }
             glm::ivec2 orig = glm::ivec2(lineBuf[9]-97, lineBuf[10]-49);
             glm::ivec2 dest = glm::ivec2(lineBuf[11]-97, lineBuf[12]-49);
 
@@ -375,8 +509,10 @@ public:
         board[newPos.x][newPos.y] = pce;
         pce->position = newPos;
         pce->hasMoved = true;
-        if (animate)
+        if (animate) {
             animatePce (pce->instance, (float)newPos.x,(float)newPos.y);
+            updateMiniBoard();
+        }
     }
     void capturePce (Piece* p, bool animate = false) {
         board[p->position.x][p->position.y] = nullptr;
@@ -430,6 +566,8 @@ public:
         while (movesPtr<untilPtr) {
             glm::ivec2 orig = glm::ivec2(movesBuffer[movesPtr]-97, movesBuffer[movesPtr+1]-49);
             glm::ivec2 dest = glm::ivec2(movesBuffer[movesPtr+2]-97, movesBuffer[movesPtr+3]-49);
+            std::cout << "replay (" << std::to_string(orig.x + 1) << ", " << std::to_string(orig.y + 1) << ") => ("
+                      << std::to_string(dest.x + 1) << ", " << std::to_string(dest.y + 1) << ")" << std::endl;
             PceType promotion = Pawn;
             if (movesBuffer[movesPtr+4] != 0x20) {
                 switch (movesBuffer[movesPtr+4]) {
@@ -467,7 +605,7 @@ public:
             if ((int)curPos.x != (pieces[i].position.x*2-7) || (int)curPos.z != (7-2*pieces[i].position.y))
                 animatePce (pieces[i].instance, (float)pieces[i].position.x,(float)pieces[i].position.y);
         }
-
+        updateMiniBoard();
         startTurn();
     }
 
@@ -479,6 +617,9 @@ public:
 
 
         if (p) {
+            if (p->type == King && animate)
+                setCaseRedLight(p->position, 0);
+
             if (p->type == King && abs(orig.x - dest.x)>1){//rocking
                 //move tower
                 if (dest.x == 6)//right tower
@@ -650,34 +791,38 @@ public:
         int pceOffset = (k->color == Black) ? 16 : 0;
         //TODO: check king is safe on rook position
 
-        //castling long
-        for (int i=k->position.x-1; i>0; i--){
-            if (board[i][k->position.y]){
-                castlingOk=false;
-                break;
+        //check if tower is in place
+        if (!pieces[pceOffset].hasMoved) {
+            //castling long
+            for (int i=k->position.x-1; i>0; i--){
+                if (board[i][k->position.y]){
+                    castlingOk=false;
+                    break;
+                }
+                if (!PreviewBoard(k, glm::ivec2(i, k->position.y))){
+                    castlingOk=false;
+                    break;
+                }
             }
-            if (!PreviewBoard(k, glm::ivec2(i, k->position.y))){
-                castlingOk=false;
-                break;
-            }
+            if (castlingOk && !pieces[pceOffset].hasMoved)
+                validMoves.push_back(glm::ivec2(k->position.x-2,k->position.y));
         }
-        if (castlingOk && !pieces[pceOffset].hasMoved)
-            validMoves.push_back(glm::ivec2(k->position.x-2,k->position.y));
-
         //castling short
-        castlingOk = true;
-        for (int i=k->position.x+1; i<7;i++){
-            if (board[i][k->position.y]){
-                castlingOk=false;
-                break;
+        if (!pieces[pceOffset + 7].hasMoved) {
+            castlingOk = true;
+            for (int i=k->position.x+1; i<7;i++){
+                if (board[i][k->position.y]){
+                    castlingOk=false;
+                    break;
+                }
+                if (!PreviewBoard(k, glm::ivec2(i, k->position.y))){
+                    castlingOk=false;
+                    break;
+                }
             }
-            if (!PreviewBoard(k, glm::ivec2(i, k->position.y))){
-                castlingOk=false;
-                break;
-            }
+            if (castlingOk && !pieces[7+pceOffset].hasMoved)
+                validMoves.push_back(glm::ivec2(k->position.x+2,k->position.y));
         }
-        if (castlingOk && !pieces[7+pceOffset].hasMoved)
-            validMoves.push_back(glm::ivec2(k->position.x+2,k->position.y));
     }
     void computeValidMove(Piece* p){
         if (p->captured)
@@ -741,22 +886,46 @@ public:
             Piece* p = &pieces[i];
             if (p->promoted)
                 resetPromotion (p, false);
-            if (p->position != p->initPosition)
-                boardMove (p, p->initPosition, animate);
+            if (p->position != p->initPosition){
+                board[p->initPosition.x][p->initPosition.y] = p;
+                p->position = p->initPosition;
+                if (animate)
+                    animatePce (p->instance, (float)p->position.x,(float)p->position.y);
+            }
             p->captured = false;
             p->hasMoved = false;
         }
+        for (int x=0; x<8; x++){
+            if (animate){
+                setCaseLight(glm::ivec2(x,0), glm::vec4(0));
+                setCaseLight(glm::ivec2(x,1), glm::vec4(0));
+            }
+            for (int y=2; y<6; y++){
+                board[x][y] = nullptr;
+                if (animate)
+                    setCaseLight(glm::ivec2(x,y), glm::vec4(0));
+            }
+            if (animate){
+                setCaseLight(glm::ivec2(x,6), glm::vec4(0));
+                setCaseLight(glm::ivec2(x,7), glm::vec4(0));
+            }
+        }
+        if (animate)
+            updateMiniBoard();
         movesPtr = previouMovesPtr = 24;
     }
 
     void startGame () {
+        gameStarted = false;
+
         resetBoard();
+        updateMiniBoard();
 
         rebuildCommandBuffers();
 
         strncpy(movesBuffer, "position startpos moves ", 24);
 
-
+        write(sfWritefd,"isready\n",8);
         //enableHint();
     }
     void switchPlayer (bool _startTurn = true) {
@@ -796,7 +965,7 @@ public:
 
         if (playerIsAi[currentPlayer]){
             sendPositionsCmd();
-            write(sfWritefd, sfcmdGo , strlen(sfcmdGo));
+            write(sfWritefd, sfcmdGo.c_str() , sfcmdGo.length());
             return;
         }
 
@@ -835,6 +1004,10 @@ public:
     void setCaseLight (glm::ivec2 c, glm::vec4 color) {
         mod->instanceDatas[casesInstances[c.x][c.y]].color = color;
         mod->setInstanceIsDirty(casesInstances[c.x][c.y]);
+    }
+    void setCaseRedLight (glm::ivec2 p, float c) {
+        mod->instanceDatas[casesInstances[p.x][p.y]].color.x = c;
+        mod->setInstanceIsDirty(casesInstances[p.x][p.y]);
     }
     inline void addCaseLight (glm::ivec2 c, glm::vec4 color) {
         addCaseLight(c.x, c.y, color);
@@ -889,9 +1062,9 @@ public:
     }
 
     void drawDebugTri (glm::vec3 p, glm::vec3 color) {
-        debugRenderer->drawLine(glm::vec3(0,0,0), p, color);
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(p.x,0,p.z), color);
-        debugRenderer->drawLine(p, glm::vec3(p.x,0,p.z), color);
+//        debugRenderer->drawLine(glm::vec3(0,0,0), p, color);
+//        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(p.x,0,p.z), color);
+//        debugRenderer->drawLine(p, glm::vec3(p.x,0,p.z), color);
     }
     glm::vec3 vResult;
 
@@ -985,6 +1158,7 @@ public:
     virtual void keyPressed(uint32_t key) {
         switch (key) {
         case GLFW_KEY_G://g: restart game
+            startGame();
             break;
         case GLFW_KEY_R://r: redo last undo
             startGame();
@@ -1003,6 +1177,19 @@ public:
 
     virtual void prepareRenderers() {
         sceneRenderer = new pbrRenderer();
+
+        //vkvg full screen texture
+        sceneRenderer->fullScreenTex = vks::Texture(device,
+                                                        vkvg_surface_get_vk_format (surf),
+                                                        vkvg_surface_get_vk_image (surf),
+                                                        vkvg_surface_get_width (surf),
+                                                        vkvg_surface_get_height (surf));
+
+        sceneRenderer->fullScreenTex.createView(VK_IMAGE_VIEW_TYPE_2D);
+        sceneRenderer->fullScreenTex.createSampler(VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                                                   VK_SAMPLER_MIPMAP_MODE_LINEAR);
+        sceneRenderer->fullScreenTex.updateDescriptor();
+
         sceneRenderer->create(device, renderTarget, sharedUBOs);
 
         sceneRenderer->models.resize(1);
@@ -1044,22 +1231,38 @@ public:
         sceneRenderer->prepareModels();
         sceneRenderer->buildCommandBuffer();
 
-        debugRenderer = new vks::vkRenderer ();
-        debugRenderer->create(device, renderTarget, sharedUBOs);
-        //debugRenderer->clear();
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,1,0), glm::vec3(0,1,0));
-        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,0,1), glm::vec3(0,0,1));
-        debugRenderer->flush();
+//        debugRenderer = new vks::vkRenderer ();
+//        debugRenderer->create(device, renderTarget, sharedUBOs);
+//        //debugRenderer->clear();
+//        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(1,0,0), glm::vec3(1,0,0));
+//        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,1,0), glm::vec3(0,1,0));
+//        debugRenderer->drawLine(glm::vec3(0,0,0), glm::vec3(0,0,1), glm::vec3(0,0,1));
+//        debugRenderer->flush();
     }
+    VkvgSurface piecesImgs[2][6];
+
     virtual void prepare() {
+
+        vkvgDev  = vkvg_device_create (device->phy, device->dev, phyInfos.gQueues[0], 0);
+        surf    = vkvg_surface_create(vkvgDev, width, height);
+        vkvg_surface_clear(surf);
+
+        piecesImgs[White][King] = vkvg_surface_create_from_image(vkvgDev, "data/wk.png");
+        piecesImgs[White][Queen] = vkvg_surface_create_from_image(vkvgDev, "data/wq.png");
+        piecesImgs[White][Bishop] = vkvg_surface_create_from_image(vkvgDev, "data/wb.png");
+        piecesImgs[White][Rook] = vkvg_surface_create_from_image(vkvgDev, "data/wr.png");
+        piecesImgs[White][Knight] = vkvg_surface_create_from_image(vkvgDev, "data/wn.png");
+        piecesImgs[White][Pawn] = vkvg_surface_create_from_image(vkvgDev, "data/wp.png");
+        piecesImgs[Black][King] = vkvg_surface_create_from_image(vkvgDev, "data/bk.png");
+        piecesImgs[Black][Queen] = vkvg_surface_create_from_image(vkvgDev, "data/bq.png");
+        piecesImgs[Black][Bishop] = vkvg_surface_create_from_image(vkvgDev, "data/bb.png");
+        piecesImgs[Black][Rook] = vkvg_surface_create_from_image(vkvgDev, "data/br.png");
+        piecesImgs[Black][Knight] = vkvg_surface_create_from_image(vkvgDev, "data/bn.png");
+        piecesImgs[Black][Pawn] = vkvg_surface_create_from_image(vkvgDev, "data/bp.png");
 
         prepareRenderers();
 
         startStockFish();
-
-        if (getStockFishIsReady())
-            std::cout << "stockfish is ready" << std::endl;
 
         startGame();
     }

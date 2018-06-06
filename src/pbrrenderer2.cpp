@@ -31,7 +31,7 @@ void pbrRenderer::prepareModels() {
 }
 
 void pbrRenderer::configurePipelineLayout () {
-    shadingCtx = new vks::ShadingContext (device, 2);
+    shadingCtx = new vks::ShadingContext (device, 3);
 
     shadingCtx->addDescriptorSetLayout(
         {//scene
@@ -46,6 +46,11 @@ void pbrRenderer::configurePipelineLayout () {
             { 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr },//texture sampler
             { 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr },//material ubo
         });
+    shadingCtx->addDescriptorSetLayout(
+        {//meshes
+            { 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr },//vkvg texture
+        });
+
 
     shadingCtx->prepare();
 
@@ -77,6 +82,12 @@ void pbrRenderer::prepareDescriptors()
             {0,3,&textures.prefilteredCube},
             {0,4,&textures.lutBrdf}
         });
+
+    descriptorSet = shadingCtx->allocateDescriptorSet (2);
+    shadingCtx->updateDescriptorSet (descriptorSet,
+    {
+        {2,0,&fullScreenTex},
+    });
 }
 void pbrRenderer::preparePipeline() {
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = {VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
@@ -210,6 +221,23 @@ void pbrRenderer::preparePipeline() {
 
     for (auto shaderStage : shaderStages)
         vkDestroyShaderModule(device->dev, shaderStage.module, nullptr);
+
+    //create full screen quad pipeline to render vkvg texture
+    rasterizationStateCI.cullMode = VK_CULL_MODE_FRONT_BIT;
+    rasterizationStateCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    vertexInputStateCI.vertexBindingDescriptionCount = 0;
+    vertexInputStateCI.vertexAttributeDescriptionCount = 0;
+    vertexInputStateCI.pVertexBindingDescriptions = nullptr;
+    vertexInputStateCI.pVertexAttributeDescriptions = nullptr;
+
+    shaderStages = {
+        loadShader(device->dev, "FullScreenQuad.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
+        loadShader(device->dev, "simpletexture.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
+    };
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device->dev, device->pipelineCache, 1, &pipelineCI, nullptr, &pipeline));
+
+    for (auto shaderStage : shaderStages)
+        vkDestroyShaderModule(device->dev, shaderStage.module, nullptr);
 }
 
 void pbrRenderer::draw(VkCommandBuffer cmdBuff) {
@@ -219,10 +247,23 @@ void pbrRenderer::draw(VkCommandBuffer cmdBuff) {
 
     skybox.buildCommandBuffer (cmdBuff, pipelineLayout);
 
-    // Opaque primitives first
+    // Opaque primitives
     vkCmdBindPipeline(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
-
     models[0].buildCommandBuffer (cmdBuff, pipelineLayout);
+
+    //full screen quad
+    fullScreenTex.setImageLayout(cmdBuff, VK_IMAGE_ASPECT_COLOR_BIT,
+                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+    vkCmdBindDescriptorSets(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &descriptorSet, 0, NULL);
+    vkCmdBindPipeline(cmdBuff, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+    vkCmdDraw(cmdBuff, 3, 1, 0, 0);
+
+    fullScreenTex.setImageLayout(cmdBuff, VK_IMAGE_ASPECT_COLOR_BIT,
+                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 }
 
 void pbrRenderer::generateBRDFLUT()
