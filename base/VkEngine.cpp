@@ -223,16 +223,15 @@ vks::VkEngine::VkEngine (uint32_t _width, uint32_t _height,
     glfwWindowHint(GLFW_FLOATING,   GLFW_FALSE);
     glfwWindowHint(GLFW_DECORATED,  GLFW_TRUE);
 
-    window = glfwCreateWindow (width, height, "Window Title", NULL, NULL);
+    window = glfwCreateWindow   (width, height, "Window Title", NULL, NULL);
 
-    glfwSetWindowUserPointer(window, this);
+    glfwSetWindowUserPointer    (window, this);
 
     glfwSetKeyCallback          (window, onkey_callback);
     glfwSetCharCallback         (window, char_callback);
     glfwSetMouseButtonCallback  (window, mouse_button_callback);
     glfwSetCursorPosCallback    (window, mouse_move_callback);
     //glfwSetScrollCallback       (e->window, onScroll);
-
 
     VK_CHECK_RESULT(glfwCreateWindowSurface(instance, window, NULL, &surface));
 
@@ -279,7 +278,7 @@ void vks::VkEngine::start () {
         devLayers.push_back ("VK_LAYER_LUNARG_standard_validation");
 #endif
 
-    device = new vks::VulkanDevice (phyInfos, devLayers);
+    device  = new vks::VulkanDevice (phyInfos, devLayers);
 
     swapChain = new VulkanSwapChain (this, false);
     swapChain->create (width, height);
@@ -403,7 +402,7 @@ void vks::VkEngine::renderLoop()
 
 void vks::VkEngine::prepareFrame()
 {
-    VkResult err = swapChain->acquireNextImage();
+    VkResult err = swapChain->acquireNextImage (device->dev);
     if ((err == VK_ERROR_OUT_OF_DATE_KHR) || (err == VK_SUBOPTIMAL_KHR)) {
         windowResize();
     } else {

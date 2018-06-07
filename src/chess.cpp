@@ -119,6 +119,7 @@ public:
     Color currentPlayer = White;
     bool gameStarted = false;
     bool playerIsAi[2] = {true,true};
+    bool playerWin[2] = {false,false};
     Piece pieces[32];
     Piece* board[8][8] = {};
 
@@ -144,7 +145,7 @@ public:
     char sfOutBuff[1024];
     int sfOutBuffPtr=0;
 
-    std::string sfcmdGo = "go movetime 200\n";
+    std::string sfcmdGo = "go movetime 50\n";
     const char* initPosCmd = "position startpos moves ";
     char movesBuffer[40000];
     int previouMovesPtr;
@@ -175,6 +176,31 @@ public:
         vkvg_destroy (ctx);
     }
 
+    void print_winner () {
+        const int x = 200;
+        const int y = 250;
+        VkvgContext ctx = vkvg_create(surf);
+
+        std::string msg;
+        if (playerWin[White])
+            msg = "Whites win";
+        else if (playerWin[Black])
+            msg = "Blacks win";
+        else
+            msg = "Pad";
+
+        vkvg_move_to(ctx,x+5,y+5);
+        vkvg_set_font_size(ctx,120);
+        vkvg_select_font_face(ctx,"mono");
+        vkvg_set_source_rgba (ctx, 0,0,0,1);
+        vkvg_show_text(ctx, msg.c_str());
+        //vkvg_flush(ctx);
+        vkvg_move_to(ctx,x,y);
+        vkvg_set_source_rgba (ctx, 1,1,1,1);
+        vkvg_show_text(ctx, msg.c_str());
+
+        vkvg_destroy (ctx);
+    }
     void vkvg_print_fps() {
         const int x = 10;
         const int y = 64;
@@ -416,10 +442,13 @@ public:
 
         }else if (strncmp (lineBuf, "bestmove", 8)==0){
             if (strncmp(lineBuf+9, "(none)", 6)==0) {
+                gameStarted = false;
+                if (currentPlayer == White)
+                    playerWin[Black] = true;
+                else
+                    playerWin[White] = true;
+                print_winner();
                 return;
-                if (playerIsAi[currentPlayer])
-                    gameStarted = false;
-
             }
             glm::ivec2 orig = glm::ivec2(lineBuf[9]-97, lineBuf[10]-49);
             glm::ivec2 dest = glm::ivec2(lineBuf[11]-97, lineBuf[12]-49);
@@ -917,6 +946,7 @@ public:
 
     void startGame () {
         gameStarted = false;
+        playerWin[White] = playerWin[Black] = false;
 
         resetBoard();
         updateMiniBoard();
@@ -963,16 +993,13 @@ public:
         else
             setCaseLight(getKing(currentPlayer)->position, checkColor);
 
-        if (playerIsAi[currentPlayer]){
-            sendPositionsCmd();
-            write(sfWritefd, sfcmdGo.c_str() , sfcmdGo.length());
-            return;
-        }
-
-        if (!hint)
-            return;
         sendPositionsCmd();
-        write(sfWritefd,"go infinite\n", 12);
+        if (playerIsAi[currentPlayer]){
+            write(sfWritefd, sfcmdGo.c_str() , sfcmdGo.length());
+        }else if (hint)
+            write(sfWritefd,"go infinite\n", 12);
+        else
+            write(sfWritefd,"go\n", 3);
     }
 
     void addPiece (uint32_t pIdx, const std::string& model, PceType type, Color color, int x, int y, float yAngle = 0.f) {
@@ -1303,9 +1330,6 @@ int main(const int argc, const char *argv[])
     for (size_t i = 0; i < argc; i++) { VkChess::args.push_back(argv[i]); };
     vkChess = new VkChess();
     vkChess->start();
-    //vulkanExample->setupWindow();
-    //vulkanExample->prepare();
-    //vulkanExample->renderLoop();
     delete(vkChess);
     return 0;
 }

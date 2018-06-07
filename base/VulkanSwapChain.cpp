@@ -223,23 +223,3 @@ void vks::VulkanSwapChain::create(uint32_t& width, uint32_t& height)
 }
 
 
-VkResult vks::VulkanSwapChain::acquireNextImage()
-{
-    // By setting timeout to UINT64_MAX we will always wait until the next image has been acquired or an actual error is thrown
-    // With that we don't have to handle VK_NOT_READY
-    return fpAcquireNextImageKHR(vke->device->dev, swapChain, UINT64_MAX, presentCompleteSemaphore, (VkFence)nullptr, &currentBuffer);
-}
-
-VkResult vks::VulkanSwapChain::queuePresent(VkQueue queue, VkSemaphore waitSemaphore)
-{
-    presentInfo.pImageIndices = &currentBuffer;
-    // Check if a wait semaphore has been specified to wait for before presenting the image
-    if (waitSemaphore != VK_NULL_HANDLE)
-    {
-        presentInfo.pWaitSemaphores = &waitSemaphore;
-        presentInfo.waitSemaphoreCount = 1;
-    }
-    return fpQueuePresentKHR(queue, &presentInfo);
-}
-
-

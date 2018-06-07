@@ -55,8 +55,21 @@ namespace vks {
 
         void create(uint32_t& width, uint32_t& height);
 
-        VkResult acquireNextImage();
-        VkResult queuePresent(VkQueue queue, VkSemaphore waitSemaphore = VK_NULL_HANDLE);
+        inline VkResult acquireNextImage(VkDevice dev) {
+            return fpAcquireNextImageKHR(dev, swapChain, UINT64_MAX,
+                                         presentCompleteSemaphore, (VkFence)nullptr, &currentBuffer);
+        }
+        inline VkResult queuePresent(VkQueue queue, VkSemaphore waitSemaphore = VK_NULL_HANDLE) {
+            presentInfo.pImageIndices = &currentBuffer;
+            presentInfo.pWaitSemaphores = &waitSemaphore;
+
+            if (waitSemaphore == VK_NULL_HANDLE)
+                presentInfo.waitSemaphoreCount = 0;
+            else
+                presentInfo.waitSemaphoreCount = 1;
+
+            return fpQueuePresentKHR(queue, &presentInfo);
+        }
     };
 
 }

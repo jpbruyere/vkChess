@@ -46,9 +46,11 @@ namespace vks {
 
         std::string getWindowTitle();
 
+#if DEBUG
         PFN_vkCreateDebugReportCallbackEXT  vkCreateDebugReportCallback;
         PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallback;
         VkDebugReportCallbackEXT            debugReportCallback;
+#endif
 
         void createInstance (const std::string& app_name, std::vector<const char*>& extentions);
     protected:
