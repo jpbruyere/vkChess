@@ -88,7 +88,7 @@ public:
         camera.setRotation({ 42.0f, 0.0f, 0.0f });
         camera.setPosition({ .0f, -12.f, -15.f });
 
-        settings.validation = false;
+        settings.validation = true;
 
         phyInfos.enabledFeatures.samplerAnisotropy
                 = phyInfos.features.samplerAnisotropy;
@@ -117,11 +117,11 @@ public:
     const glm::vec4 checkColor      = glm::vec4(0.6,0.0,0.0,1.0);
 
     Color currentPlayer = White;
-    bool gameStarted = false;
-    bool playerIsAi[2] = {true,true};
-    bool playerWin[2] = {false,false};
+    bool gameStarted    = false;
+    bool playerIsAi[2]  = {false,true};
+    bool playerWin[2]   = {false,false};
     Piece pieces[32];
-    Piece* board[8][8] = {};
+    Piece* board[8][8]  = {};
 
     int cptWhiteOut = 0;
     int cptBlackOut = 0;
@@ -129,21 +129,21 @@ public:
     int animSteps = 150;
     std::vector <animation> animations;
 
-    glm::ivec2 bestMoveOrig = glm::ivec2(-1,-1);
-    glm::ivec2 bestMoveTarget = glm::ivec2(-1,-1);
+    glm::ivec2 bestMoveOrig     = glm::ivec2(-1,-1);
+    glm::ivec2 bestMoveTarget   = glm::ivec2(-1,-1);
 
-    glm::ivec2 hoverSquare = glm::ivec2(-1,-1);
-    glm::ivec2 selectedSquare = glm::ivec2(-1,-1);
+    glm::ivec2 hoverSquare      = glm::ivec2(-1,-1);
+    glm::ivec2 selectedSquare   = glm::ivec2(-1,-1);
 
     //stockfish
-    bool stockFishIsReady = false;
-    bool hint = false;
-    uint8_t level[2] = {20,0};
+    bool stockFishIsReady   = false;
+    bool hint               = false;
+    uint8_t level[2]        = {20,0};
     char* nextCommand;
     int sfPid, sfReadfd, sfWritefd;
 
     char sfOutBuff[1024];
-    int sfOutBuffPtr=0;
+    int sfOutBuffPtr        = 0;
 
     std::string sfcmdGo = "go movetime 50\n";
     const char* initPosCmd = "position startpos moves ";
@@ -224,7 +224,7 @@ public:
         vkvg_destroy (ctx);
     }
     void updateMiniBoard() {
-        vkvg_surface_clear (surf);
+        //vkvg_surface_clear (surf);
 
         /*vkvg_matrix_t mat;
         vkvg_matrix_init_translate (&mat, 105,105);
@@ -233,6 +233,9 @@ public:
 
 
         VkvgContext ctx = vkvg_create(surf);
+        vkvg_clear(ctx);
+
+        vkvg_scale(ctx, 0.5,0.5);
 
         //vkvg_set_matrix(ctx,&mat);
         const int x = 100;
@@ -267,9 +270,10 @@ public:
         for(uint i=0; i<32; i++) {
             int cx = pieces[i].position.x * caseSize + x + margin + caseSize/2 - vkvg_surface_get_width(piecesImgs[pieces[i].color][pieces[i].type])/2;// + caseSize / 2;
             int cy = y + margin + 7*caseSize - pieces[i].position.y * caseSize +2;// + caseSize / 2;
-            vkvg_set_source_surface(ctx, piecesImgs[pieces[i].color][pieces[i].type], cx, cy);
+            vkvg_set_source_surface(ctx, piecesImgs[pieces[i].color][pieces[i].type], cx*0.5, cy*0.5);
             vkvg_paint(ctx);
         }
+
 
 //        vkvg_select_font_face (ctx, "mono");
 //        vkvg_set_font_size (ctx, 20.0);
@@ -296,7 +300,9 @@ public:
 
         mod->updateInstancesBuffer();
 
+        //updateMiniBoard();
         vkvg_print_fps();
+
         //vkvg_test();
     }
 
@@ -347,7 +353,11 @@ public:
         //write(sfWritefd, movesBuffer, movesPtr-1 );
         //write(sfWritefd, "\n", 1 );
         //write(sfWritefd, sfcmdGo.c_str() , sfcmdGo.length());
+
+#if DEBUG_STOCKFISH
         std::cout << std::to_string(sfWritefd) << " <= " << out.str();
+#endif
+
         write(sfWritefd, out.str().c_str(), out.tellp());
 
     }
@@ -405,7 +415,8 @@ public:
                 lineBuf[ptr++] = c;
         }
         lineBuf[ptr] = 0;
-#if DEBUG
+
+#if DEBUG_STOCKFISH
       std::cout << "=> " << lineBuf;
       std::flush(std::cout);
 #endif
@@ -545,19 +556,22 @@ public:
     }
     void capturePce (Piece* p, bool animate = false) {
         board[p->position.x][p->position.y] = nullptr;
+        p->captured = true;
+
+        if (!animate)
+            return;
+
         if (p->color == White){
             p->position = glm::ivec2(-2 - cptWhiteOut / CAPTURE_ZONE_HEIGHT, 7 - cptWhiteOut % CAPTURE_ZONE_HEIGHT);
-            p->captured = true;
             cptWhiteOut ++;
         }else{
             p->position = glm::ivec2(9 + cptBlackOut / CAPTURE_ZONE_HEIGHT, 7 - cptBlackOut % CAPTURE_ZONE_HEIGHT);
             cptBlackOut ++;
         }
-        if (animate){
-            if (p->promoted)
-                resetPromotion(p,true);
-            animatePce (p->instance, (float)p->position.x,(float)p->position.y);
-        }
+
+        if (p->promoted)
+            resetPromotion(p,true);
+        animatePce (p->instance, (float)p->position.x,(float)p->position.y);
     }
 
     void resetPromotion (Piece* p, bool rebuildCmdBuffs = true) {
@@ -1164,7 +1178,6 @@ public:
         hoverPos.x = round(hoverPos.x);
         hoverPos.z = round(hoverPos.z);
 
-//x*2 - 7,0, 7 - y*2
         if (newPos.x<0||newPos.y<0||newPos.x>7||newPos.y>7){
             newPos.x = -1;
             newPos.y = -1;

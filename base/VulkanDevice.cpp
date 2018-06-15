@@ -13,7 +13,6 @@ vks::VulkanDevice::VulkanDevice(vkPhyInfo phyInfos, const std::vector<const char
         phyInfos.pQueueInfos[i].pQueuePriorities = phyInfos.qPriorities[i].data();
 
     std::vector<const char*> devExtentions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-    ;
 
     VkDeviceCreateInfo devInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
     devInfo.queueCreateInfoCount    = (uint32_t)phyInfos.pQueueInfos.size();
