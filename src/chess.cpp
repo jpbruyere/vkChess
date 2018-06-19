@@ -557,9 +557,7 @@ public:
     void capturePce (Piece* p, bool animate = false) {
         board[p->position.x][p->position.y] = nullptr;
         p->captured = true;
-
-        if (!animate)
-            return;
+        p->hasMoved = true;
 
         if (p->color == White){
             p->position = glm::ivec2(-2 - cptWhiteOut / CAPTURE_ZONE_HEIGHT, 7 - cptWhiteOut % CAPTURE_ZONE_HEIGHT);
@@ -568,6 +566,9 @@ public:
             p->position = glm::ivec2(9 + cptBlackOut / CAPTURE_ZONE_HEIGHT, 7 - cptBlackOut % CAPTURE_ZONE_HEIGHT);
             cptBlackOut ++;
         }
+
+        if (!animate)
+            return;
 
         if (p->promoted)
             resetPromotion(p,true);
@@ -748,6 +749,8 @@ public:
         memcpy (savedPces, pieces, 32*sizeof(Piece));
         Piece* savedBoard[8][8] = {};
         memcpy (savedBoard, board, 64*sizeof(Piece*));
+        int savedCptWhiteOut = cptWhiteOut;
+        int savedCptBlackOut = cptBlackOut;
 
         processMove (p->position, newPos, Pawn, false);
 
@@ -758,6 +761,8 @@ public:
         memcpy (pieces, savedPces, 32*sizeof(Piece));
         memcpy (board, savedBoard, 64*sizeof(Piece*));
         validMoves = saveCurrentValidMoves;
+        cptWhiteOut = savedCptWhiteOut;
+        cptBlackOut = savedCptBlackOut;
 
         return kingOk;
     }
