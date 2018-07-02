@@ -146,6 +146,10 @@ FOREACH(DATA_FILE ${DATAS})
 ENDFOREACH()
 add_custom_target(DataCopy ALL DEPENDS ${DATAS})
 
+IF (NOT GLSLC)
+	message(FATAL_ERROR "Could not find glslc executable")
+ENDIF()
+
 if(GLSLC)
 	SET(SHADER_DIR "shaders")
 	SET(SHADER_FILES ${SHADER_DIR}/*.frag ${SHADER_DIR}/*.vert ${SHADER_DIR}/*.geom  ${SHADER_DIR}/*.comp)
