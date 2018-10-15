@@ -33,12 +33,12 @@ void vks::vkRenderer::destroy() {
 
     delete shadingCtx;
 
-    if (pipeline)
-        vkDestroyPipeline       (device->dev, pipeline, VK_NULL_HANDLE);
-    if (pipelineLayout)
-        vkDestroyPipelineLayout (device->dev, pipelineLayout, VK_NULL_HANDLE);
-    if (commandPool)
-        vkDestroyCommandPool    (device->dev, commandPool, VK_NULL_HANDLE);
+    vkDestroyPipeline       (device->dev, pipeline, VK_NULL_HANDLE);
+    vkDestroyPipelineLayout (device->dev, pipelineLayout, VK_NULL_HANDLE);
+    vkDestroyCommandPool    (device->dev, commandPool, VK_NULL_HANDLE);
+    pipeline        = VK_NULL_HANDLE;
+    pipelineLayout  = VK_NULL_HANDLE;
+    commandPool     = VK_NULL_HANDLE;
 }
 void vks::vkRenderer::prepare() {
     fences.resize (renderTarget->swapChain->imageCount);
