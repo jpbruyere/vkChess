@@ -49,8 +49,7 @@ vks::VulkanDevice::VulkanDevice(vkPhyInfo phyInfos, const std::vector<const char
     }
 
     VK_CHECK_RESULT(vkCreatePipelineCache (dev, &pipelineCacheCreateInfo, nullptr, &pipelineCache));
-    if (buffer)
-        delete[] buffer;
+    delete[] buffer;
 }
 
 vks::VulkanDevice::~VulkanDevice()

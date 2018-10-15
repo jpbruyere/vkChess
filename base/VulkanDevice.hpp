@@ -123,7 +123,7 @@ namespace vks
 
         VkCommandPool   commandPool     = VK_NULL_HANDLE;
         VkPipelineCache pipelineCache   = VK_NULL_HANDLE;
-        bool            savePLCache     = false;
+        bool            savePLCache     = true;
 
         VkQueue queue;
 

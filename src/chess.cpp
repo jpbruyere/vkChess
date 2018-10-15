@@ -251,12 +251,12 @@ public:
         vkvg_fill(ctx);
 
         vkvg_rectangle(ctx, x+margin,y+margin,8*caseSize,8*caseSize);
-        vkvg_set_source_rgba (ctx, 0.8,0.8,0.8,0.5);
+        vkvg_set_source_rgba (ctx, 0.0,0.0,0.0,0.5);
         vkvg_fill(ctx);
 
         //vkvg_set_source_rgba (ctx, 0,0,0,1);
         //vkvg_move_to(ctx,20,20);
-        vkvg_set_source_rgba (ctx, 0,0,0,0.5);
+        vkvg_set_source_rgba (ctx, 0.8,0.8,0.8,.5);
         for(int cx=0; cx<4; cx++) {
             for(int cy=0; cy<8; cy++) {
                 vkvg_rectangle(ctx, x + margin + cx * caseSize * 2 + cy%2 * caseSize,

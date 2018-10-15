@@ -14,7 +14,6 @@
 
 class Camera
 {
-private:
     float fov;
     float znear, zfar;
 
@@ -30,24 +29,20 @@ private:
         transM = glm::translate(glm::mat4(1.0f), position);
 
         if (type == CameraType::firstperson)
-        {
             matrices.view = rotM * transM;
-        }
         else
-        {
             matrices.view = transM * rotM;
-        }
-    };
+    }
 public:
     enum CameraType { lookat, firstperson };
     CameraType type = CameraType::lookat;
 
-    glm::vec3 rotation = glm::vec3();
-    glm::vec3 position = glm::vec3();
+    glm::vec3 rotation  = glm::vec3();
+    glm::vec3 position  = glm::vec3();
 
     float rotationSpeed = 1.0f;
     float movementSpeed = 1.0f;
-    float zoomSpeed = 0.5f;
+    float zoomSpeed     = 0.5f;
 
     struct
     {
@@ -55,12 +50,11 @@ public:
         glm::mat4 view;
     } matrices;
 
-    struct
-    {
-        bool left = false;
-        bool right = false;
-        bool up = false;
-        bool down = false;
+    struct {
+        bool left   = false;
+        bool right  = false;
+        bool up     = false;
+        bool down   = false;
     } keys;
 
     bool moving()
