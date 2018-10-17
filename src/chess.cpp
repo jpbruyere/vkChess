@@ -1315,13 +1315,10 @@ public:
         VkEngine::windowResize();
         rebuildCommandBuffers();
     }
-    void buildCommandBuffers() {
 
-    }
     void rebuildCommandBuffers() {
         sceneRenderer->rebuildCommandBuffer();
     }
-
 
     void render () {
         if (!prepared)

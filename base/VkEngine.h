@@ -40,9 +40,6 @@ namespace vks {
         uint32_t    frameCounter = 0;
 
         bool        viewUpdated = false;
-        bool        resizing = false;
-        uint32_t    destWidth;
-        uint32_t    destHeight;
 
         std::string getWindowTitle();
 
@@ -136,8 +133,6 @@ namespace vks {
         void updateUniformBuffers();
         void updateParams();
 
-        void renderLoop();
         void prepareFrame();
-        void renderFrame();
     };
 }

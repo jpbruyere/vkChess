@@ -1,5 +1,5 @@
 #include "vkrenderer.h"
-#include "pbrrenderer2.h"
+//#include "pbrrenderer2.h"
 
 const VkPipelineStageFlags stageFlags = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 

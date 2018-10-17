@@ -14,7 +14,7 @@ namespace vks {
     {
         vks::VulkanDevice*					device;
         VkDescriptorPool					descriptorPool;
-        VkCommandPool                       cmdPool;
+        VkCommandPool                       cmdPool;//?
 
 
         std::vector<std::vector<VkDescriptorSetLayoutBinding>> descriptorSetLayoutBindings;
