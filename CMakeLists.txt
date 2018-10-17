@@ -30,14 +30,15 @@ endif ()
 MESSAGE(STATUS "VULKAN_SDK = $ENV{VULKAN_SDK}")
 MESSAGE(STATUS "VK_LAYER_PATH = $ENV{VK_LAYER_PATH}")
 
-include_directories(external/glm)
-include_directories(external/gli)
-include_directories(external/glfw)
-include_directories(base)
+
+#include_directories(vke)
+add_subdirectory (external/vke)
 
 SET(VKVG_BUILD_TESTS off)
 add_subdirectory	(external/vkvg)
 include_directories	(external/vkvg/include)
+include_directories	(external/vke/external/gli)
+include_directories	(external/vke/external/glm)
 
 
 OPTION(USE_D2D_WSI "Build the project using Direct to Display swapchain" OFF)
@@ -171,8 +172,6 @@ if(GLSLC)
 	ADD_CUSTOM_TARGET("${PROJECT_NAME}_BuildShaderHeader" ALL DEPENDS ${SHADER_OUTPUTS})
 endif()
 
-add_subdirectory(base)
-
 FILE(GLOB SOURCES src/*.cpp)
 
 if(WIN32)
@@ -181,7 +180,7 @@ if(WIN32)
 		#${BULLET_INCLUDE_DIR}
 	#)
 	TARGET_LINK_LIBRARIES(${PROJECT_NAME}
-		base
+		vke_static
 		${Vulkan_LIBRARY}
 		${WINLIBS}
 		#${BULLET_LIBRARIES}
@@ -191,10 +190,11 @@ else(WIN32)
 	TARGET_INCLUDE_DIRECTORIES(${PROJECT_NAME} PRIVATE
 		#${BULLET_INCLUDE_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}/src
-		${CMAKE_CURRENT_SOURCE_DIR}/base
+		${CMAKE_CURRENT_SOURCE_DIR}/external/vke/src
+		${CMAKE_CURRENT_SOURCE_DIR}/external/vke/include
 	)
 	TARGET_LINK_LIBRARIES(${PROJECT_NAME}
-		base
+		vke_static
 		vkvg
 		#{BULLET_LIBRARIES}
 	)

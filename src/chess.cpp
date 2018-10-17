@@ -25,6 +25,7 @@
 #include <iostream>
 #include <errno.h>
 
+#include "vke.h"
 #include "VkEngine.h"
 #include "VulkanSwapChain.hpp"
 #include "vkrenderer.h"
@@ -1288,7 +1289,7 @@ public:
 
     virtual void prepare() {
 
-        vkvgDev  = vkvg_device_create (device->phy, device->dev, phyInfos.gQueues[0], 0);
+        vkvgDev  = vkvg_device_create (this->instance, device->phy, device->dev, phyInfos.gQueues[0], 0);
         surf    = vkvg_surface_create(vkvgDev, width, height);
         vkvg_surface_clear(surf);
 
