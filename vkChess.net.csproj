@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFrameworks>netcoreapp3.1</TargetFrameworks>
+		<EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+		<EnableDefaultCompileItems>false</EnableDefaultCompileItems>		
+		<OutputPath>$(SolutionDir)build\$(Configuration)\</OutputPath>
+		<IntermediateOutputPath>$(SolutionDir)build\obj\$(Configuration)\</IntermediateOutputPath>
+	</PropertyGroup>
+	
+	<ItemGroup>
+		<GLSLShader Include="shaders\**\*.frag;shaders\**\*.vert;shaders\**\*.comp;shaders\**\*.geom" />
+		<None Include="data\**\*.*;ui\**\*.*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<EmbeddedResource Include="ui\*.style" />
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="vke" Version="0.2.0-beta" />
+		<!--<PackageReference Include="Vulkan" Version="0.2.4" />-->
+		<PackageReference Include="glfw-sharp" Version="0.2.12-beta" />
+		<PackageReference Include="SpirVTasks" Version="0.1.44" />		
+		<PackageReference Include="vke.EnvironmentPipeline" Version="0.2.0-beta" />		
+		<PackageReference Include="vke.gltfLoader" Version="0.2.0-beta" />
+	</ItemGroup>
+	<ItemGroup>
+		<Compile Include="src\**\*.cs" />
+	</ItemGroup>
+	<ItemGroup>
+	  <ProjectReference Include="CrowWindow\CrowWindow.csproj" />
+	</ItemGroup>
+</Project>
