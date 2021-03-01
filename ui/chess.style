@@ -1,6 +1,4 @@
-﻿Window {
-	Background="0.01,0.01,0.01,0.8";	
-}
+﻿
 icon {
 	Width="14";
 	Height="14";
@@ -27,55 +25,6 @@ labStatus2 {
 	TextAlignment="Center"; 
 }
 
-MemberViewLabel {
-	Margin="1";
-	Height="Fit";
-	Width="50%";
-	Background="White";
-}
-MemberViewHStack {
-	Focusable="true";
-	Height="Fit";
-	Spacing="1";
-	MouseEnter="{Background=SteelBlue}";
-	MouseLeave="{Background=Transparent}";
-}
-
-IcoBut {
-	Template = "#Crow.Coding.ui.IcoBut.template";
-	MinimumSize = "10,10";
-	Width = "8";
-	Height = "14";
-	Background = "White";
-}
-TabItem {
-	AllowDrag="false";
-	Background="Jet";
-}
-TreeItemBorder {
-	CornerRadius="2";
-	Margin="0";
-	Focusable="true";
-	Height="Fit";
-	Width="Stretched";
-	Foreground="Transparent";
-	MouseEnter="{Foreground=DimGrey}";
-	MouseLeave="{Foreground=Transparent}";
-}
-TreeIcon {
-	Margin="0";
-	Width="14";
-	Height="14";
-}
-NormalizedFloat {
-    Minimum="0.0";
-    Maximum="1.0";
-    SmallIncrement="0.01";
-    LargeIncrement="0.1";
-    Decimals="2";
-    Width="60";
-    Foreground="Black";
-}
 CheckBox {
 	Template = "ui/checkBox.tmp";
 	Height= "Fit";

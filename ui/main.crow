@@ -1,6 +1,12 @@
 ﻿<?xml version="1.0"?>
 <Window Caption="Options" Left="10" Top="1" Width="70%" Height="50%" CornerRadius="5" >
     <VerticalStack Spacing="1" Margin="10" >
+		<HorizontalStack Height="Fit" Margin="5">
+			<Label Text="Stockfish executable path:"/>
+			<Image Width="30" Height="20" Path="#Crow.Icons.IconAlerte.svg" Visible="{StockfishNotFound}"/>
+			<TextBox Width="Stretched" Text="{²StockfishPath}"/>
+			<Button Caption="..." MinimumSize="1,1" Width="Fit" MouseClick="onFindStockfishPath"/>
+		</HorizontalStack>
     	<HorizontalStack Height="Fit">
     		<VerticalStack Spacing="3" Width="50%" >
 		    	<HorizontalStack Height="Fit">

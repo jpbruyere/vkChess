@@ -2,4 +2,5 @@ build
 obj
 bin
 .vs
+.vscode
 *.user

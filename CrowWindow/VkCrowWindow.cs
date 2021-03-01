@@ -40,6 +40,7 @@ namespace vke {
 
 
 		VkDescriptorSetLayoutBinding dslBinding = new VkDescriptorSetLayoutBinding (0, VkShaderStageFlags.Fragment, VkDescriptorType.CombinedImageSampler);
+		FrameBuffers frameBuffers;
 
 		protected override void initVulkan () {
 			base.initVulkan ();
@@ -63,7 +64,7 @@ namespace vke {
 			ui.Start ();
 		}
 		protected virtual void CreateRenderPass () {
-			renderPass = new RenderPass (dev, swapChain.ColorFormat, dev.GetSuitableDepthFormat (), VkSampleCountFlags.SampleCount1);
+			renderPass = new RenderPass (dev, swapChain.ColorFormat, VkSampleCountFlags.SampleCount1);
 		}
 
 
@@ -144,11 +145,16 @@ namespace vke {
 			dev.WaitIdle ();
 			initCrowSurface ();
 			iFace.ProcessResize (new Rectangle (0, 0, (int)Width, (int)Height));
+			
+			frameBuffers?.Dispose();
+			frameBuffers = renderPass.CreateFrameBuffers(swapChain);
 		}
 
-		protected virtual void recordUICmd (CommandBuffer cmd) {
+		protected virtual void recordUICmd (PrimaryCommandBuffer cmd, int imageIndex) {			
+			renderPass.Begin(cmd, frameBuffers[imageIndex]);
 			fsqPl.BindDescriptorSet (cmd, descSet, 0);
 			fsqPl.RecordDraw (cmd);
+			renderPass.End (cmd);
 		}
 
 		void crowThread () {
@@ -223,12 +229,8 @@ namespace vke {
 				System.Diagnostics.Debug.WriteLine (ex.Message);
 			}
 		}
-		protected void loadIMLFragment (string imlFragment, object dataSource = null) {
-			try {
-				iFace.LoadIMLFragment (imlFragment).DataSource = dataSource;
-			} catch (Exception ex) {
-				System.Diagnostics.Debug.WriteLine (ex.Message);
-			}
+		protected void loadIMLFragment (string imlFragment, object dataSource = null) {			
+			iFace.LoadIMLFragment (imlFragment).DataSource = dataSource;			
 		}
 		protected void closeWindow (string path) {
 			Widget g = iFace.FindByName (path);
@@ -241,6 +243,7 @@ namespace vke {
 			dev.WaitIdle ();
 
 			running = false;
+			frameBuffers?.Dispose();
 			fsqPl.Dispose ();
 			dsPool.Dispose ();
 			cmdPoolCrow.Dispose ();

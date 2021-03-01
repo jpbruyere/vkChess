@@ -9,7 +9,7 @@ using vke;
 using vke.glTF;
 using Glfw;
 using Vulkan;
-using System.Runtime.InteropServices;
+using System.Reflection;
 
 namespace vkChess
 {
@@ -19,6 +19,24 @@ namespace vkChess
 	public enum PieceType { Pawn, Rook, Knight, Bishop, King, Queen };
 
 	public class VkChess : CrowWindow {
+#if NETCOREAPP		
+		static IntPtr resolveUnmanaged (Assembly assembly, String libraryName) {
+			
+			switch (libraryName)
+			{
+				case "glfw3":
+					return  System.Runtime.InteropServices.NativeLibrary.Load("glfw", assembly, null);
+				case "rsvg-2.40":
+					return  System.Runtime.InteropServices.NativeLibrary.Load("rsvg-2", assembly, null);
+			}
+			Console.WriteLine ($"[UNRESOLVE] {assembly} {libraryName}");			
+			return IntPtr.Zero;
+		}
+
+		static VkChess () {
+			System.Runtime.Loader.AssemblyLoadContext.Default.ResolvingUnmanagedDll+=resolveUnmanaged;
+		}
+#endif
 		static void Main (string [] args) {
 			Instance.VALIDATION = true;
 			//Instance.RENDER_DOC_CAPTURE = true;
@@ -126,8 +144,7 @@ namespace vkChess
 		};
 
 		DeferredPbrRenderer renderer;
-
-		[StructLayout (LayoutKind.Sequential)]
+		
 		public struct InstanceData
 		{
 			public Vector4 color;
@@ -172,7 +189,8 @@ namespace vkChess
 				statPool.End (cmds[i]);
 #else
 				renderer.recordDraw (cmds [i], i, instanceBuff, instancedCmds?.ToArray ());
-				this.recordUICmd (cmds[i]);
+
+				this.recordUICmd (cmds[i], i);
 #endif
 				cmds [i].End ();
 			}
@@ -492,6 +510,35 @@ namespace vkChess
 				EnableHint = hintIsEnabled;
 			}
 		}
+		public string StockfishDirectory {
+			get {
+				try
+				{
+					return System.IO.Path.GetDirectoryName(StockfishPath);	
+				}
+				catch
+				{
+					return Directory.GetCurrentDirectory();					
+				}
+				
+			}
+		}
+		 
+		void onFindStockfishPath (object sender, MouseButtonEventArgs e) {
+			/*loadIMLFragment (@"
+				<FileDialog Caption='Select SDK Folder' CurrentDirectory='/home'
+							ShowFiles='true' ShowHidden='true' OkClicked='onSelectStockfishPath'/>
+			",this);*/
+			
+			loadIMLFragment (@"
+				<FileDialog/>
+			",this);
+		}
+		public void onSelectStockfishPath (object sender, EventArgs e)
+		{			
+			StockfishPath = (sender as FileDialog).SelectedFileFullPath;
+		}
+
 		void onNewGameClick (object sender, MouseButtonEventArgs e) {
 			loadWindow ("ui/newGame.crow", this);
 		}
