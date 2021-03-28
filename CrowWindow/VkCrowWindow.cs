@@ -63,8 +63,18 @@ namespace vke {
 			ui.IsBackground = true;
 			ui.Start ();
 		}
-		protected virtual void CreateRenderPass () {
-			renderPass = new RenderPass (dev, swapChain.ColorFormat, VkSampleCountFlags.SampleCount1);
+		protected virtual void CreateRenderPass () {			
+			renderPass = new RenderPass (dev, VkSampleCountFlags.SampleCount1);
+			renderPass.AddAttachment (swapChain.ColorFormat, VkImageLayout.PresentSrcKHR, VkSampleCountFlags.SampleCount1, VkAttachmentLoadOp.Load);//final outpout
+			SubPass subpass0 = new SubPass ();
+			subpass0.AddColorReference (0, VkImageLayout.ColorAttachmentOptimal);
+			renderPass.AddSubpass (subpass0);
+			renderPass.AddDependency (Vk.SubpassExternal, 0,
+				VkPipelineStageFlags.BottomOfPipe, VkPipelineStageFlags.ColorAttachmentOutput,
+				VkAccessFlags.MemoryRead, VkAccessFlags.ColorAttachmentWrite);
+			renderPass.AddDependency (0, Vk.SubpassExternal,
+				VkPipelineStageFlags.ColorAttachmentOutput, VkPipelineStageFlags.BottomOfPipe,
+				VkAccessFlags.ColorAttachmentWrite, VkAccessFlags.MemoryRead);
 		}
 
 

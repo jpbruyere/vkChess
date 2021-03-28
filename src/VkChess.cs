@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -495,15 +495,12 @@ namespace vkChess
 			lock (movesMutex) {
 				bool hintIsEnabled = EnableHint;
 				EnableHint = false;
-
-				GameState lastState = currentState;
-				if ((currentState != GameState.Pad && currentState != GameState.Checkmate) || !playerIsAi (CurrentPlayer))//undo ai move
+				
+				if (currentState != GameState.Pad && currentState != GameState.Checkmate && !playerIsAi (CurrentPlayer) && playerIsAi (Opponent))//undo ai move
 					undoLastMove ();
 
 				undoLastMove ();
-				//to have checkColor removed
-				currentState = lastState;
-				CurrentState = GameState.Play;
+
 				startTurn ();
 				NotifyValueChanged ("board", board);
 
@@ -541,6 +538,9 @@ namespace vkChess
 
 		void onNewGameClick (object sender, MouseButtonEventArgs e) {
 			loadWindow ("ui/newGame.crow", this);
+		}
+		void onOptionsClick (object sender, MouseButtonEventArgs e) {
+			loadWindow ("ui/main.crow", this);
 		}
 		void onNewWhiteGame (object sender, MouseButtonEventArgs e) {
 			closeWindow ("ui/newGame.crow");
@@ -930,13 +930,11 @@ namespace vkChess
 				if (currentState == value)
 					return;
 
-				if (currentState == GameState.Checked) {
+				if (currentState == GameState.Checked || currentState == GameState.Checkmate) {
 					Point kPos = CurrentPlayerPieces.First (p => p.Type == PieceType.King).BoardCell;
 					Piece.UpdateCase (kPos.X, kPos.Y, -kingCheckedColor);
-				} else if (currentState == GameState.Checkmate) {
-					Point kPos = OpponentPieces.First (p => p.Type == PieceType.King).BoardCell;
-					Piece.UpdateCase (kPos.X, kPos.Y, -kingCheckedColor);
 				}
+
 				currentState = value;
 
 				if ((int)currentState > 2) {
@@ -953,8 +951,17 @@ namespace vkChess
 				NotifyValueChanged ("CurrentState", currentState);
 			}
 		}
+		ChessColor currentPlayer;
 
-		public ChessColor CurrentPlayer;
+		public ChessColor CurrentPlayer {
+			get => currentPlayer;
+			set {
+				if (currentPlayer == value)
+					return;
+				currentPlayer = value;
+				NotifyValueChanged ("CurrentPlayer", currentPlayer);
+			}
+		}
 
 		public ChessColor Opponent {
 			get { return CurrentPlayer == ChessColor.White ? ChessColor.Black : ChessColor.White; }
@@ -1627,6 +1634,8 @@ namespace vkChess
 
 			Piece p = board [pCurPos.X, pCurPos.Y];
 
+			CurrentState = GameState.Play;
+
 			replaySilently ();
 
 			Piece pCaptured = board [pCurPos.X, pCurPos.Y];
@@ -1642,8 +1651,6 @@ namespace vkChess
 					rook.MoveTo (new Point (difX > 0 ? 7 : 0, y), true);
 				}
 			}
-
-//			syncStockfish ();
 
 			//animate undo capture
 			if (pCaptured == null)

@@ -1,5 +1,10 @@
 ﻿<?xml version="1.0"?>
-<Border Margin="0" Foreground="Jet" MouseEnter="{Foreground=White}" MouseLeave="{Foreground=Jet}"
-	MouseDown="{Background=0.1,0.3,0.9,0.3}" MouseUp="{Background=Transparent}">			
-	<Label Margin="4" Font="{./Font}" Foreground="{./Foreground}" Text="{./Caption}" />
+<Border Background="{./Background}" Name="Content" Width="Stretched" Height="Stretched"
+	Foreground="Transparent" CornerRadius="{../CornerRadius}" BorderWidth="1"
+	MouseEnter="{Foreground=vgradient|0:White|0.2:Grey|0.9:Grey|1:Black};{caption.Foreground=White}"
+	MouseLeave="{Foreground=Transparent};{caption.Foreground=LightGrey}"
+	MouseDown="{Foreground=vgradient|0:Black|0.05:Grey|0.85:Grey|1:White}"
+	MouseUp="{Foreground=vgradient|0:White|0.2:Grey|0.9:Grey|1:Black}"		    
+	>
+	<Label Font="{./Font}" Name="caption" Margin="3" Foreground="LightGrey" Text="{./Caption}"/>
 </Border>

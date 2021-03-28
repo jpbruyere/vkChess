@@ -3,7 +3,8 @@
 	<CheckBox Caption="Hint" IsChecked="{²EnableHint}"/>   
 	<Button Caption="Undo" MouseClick="onUndoClick"/>
 	<Button Caption="New Game" MouseClick="onNewGameClick"/>
-	<Widget Width="Stretched"/>
+	<Button Caption="Options" MouseClick="onOptionsClick"/>
+	<Widget Width="Stretched" Height="1"/>
 	<Button Caption="Quit" MouseClick="onQuitClick"/>
 	<VerticalStack Style="hsStatus" >
 		<Label Style="labStatus" Text="State:"/>
@@ -12,6 +13,10 @@
 	<VerticalStack Style="hsStatus" >
 		<Label Style="labStatus" Text="Hover:"/>
 		<Label Style="labStatus2" Text="{SelCell}"/>
+	</VerticalStack>
+	<VerticalStack Style="hsStatus" >
+		<Label Style="labStatus" Text="Current Player:"/>
+		<Label Style="labStatus2" Text="{CurrentPlayer}"/>
 	</VerticalStack>
 	<Image Width="30" Height="20" Path="#Crow.Icons.IconAlerte.svg" Visible="{StockfishNotFound}"/>
 	<Label Text="Stockfish not found" Font="droid bold, 10" Visible="{StockfishNotFound}"/>

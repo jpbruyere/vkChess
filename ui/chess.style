@@ -27,26 +27,20 @@ labStatus2 {
 
 CheckBox {
 	Template = "ui/checkBox.tmp";
+	MinimumSize = "80, 30";	
+	Width="Fit";
 	Height= "Fit";
-	Width = "80";
 }
 RadioButton {
 	Template = "ui/checkBox.tmp";
+	MinimumSize = "80, 30";	
+	Width="Fit";
 	Height= "Fit";
 }
-Button {
+Button {	
 	Template = "ui/Button.tmp";
-	Height = "Fit";
-	Width = "80";
-}
-Menu {
-	Margin="0";
-	Spacing="0";
-	Background = "Transparent";
-}
-MenuItem {	
-	Background = "Transparent";
-	Margin = "0";
+	MinimumSize = "80, 30";	
+	Width="Fit";
 }
 Slider {
 	Foreground = "Jet";
