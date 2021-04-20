@@ -28,10 +28,11 @@ out gl_PerVertex
 void main() 
 {        
     vec4 locPos = ubo.model * inModel * vec4(inPos, 1.0);
+    //locPos.y = -locPos.y;
     outNormal = normalize(transpose(inverse(mat3(ubo.model * inModel))) * inNormal);
     outColor = inColor;                
     outWorldPos = locPos.xyz;
     outUV0 = inUV0;
-    outUV1 = inUV1;
-    gl_Position =  ubo.projection * ubo.view * vec4(outWorldPos, 1.0);
+    outUV1 = inUV1;        
+    gl_Position =  ubo.projection * ubo.view * vec4(outWorldPos, 1.0);    
 }

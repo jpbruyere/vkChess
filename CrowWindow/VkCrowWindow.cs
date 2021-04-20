@@ -23,6 +23,7 @@ namespace vke {
 		}
 		#endregion
 
+		protected CrowWindow() : base("vkChess.net", 800, 600,false) {}
 		public bool MouseIsInInterface =>
 			iFace.HoverWidget != null;
 
@@ -63,9 +64,11 @@ namespace vke {
 			ui.IsBackground = true;
 			ui.Start ();
 		}
-		protected virtual void CreateRenderPass () {			
+		protected virtual void CreateRenderPass () {
+			//renderPass = new RenderPass (dev, swapChain.ColorFormat, VkSampleCountFlags.SampleCount1);			
 			renderPass = new RenderPass (dev, VkSampleCountFlags.SampleCount1);
-			renderPass.AddAttachment (swapChain.ColorFormat, VkImageLayout.PresentSrcKHR, VkSampleCountFlags.SampleCount1, VkAttachmentLoadOp.Load);//final outpout
+			renderPass.AddAttachment (swapChain.ColorFormat, VkImageLayout.PresentSrcKHR, VkSampleCountFlags.SampleCount1,
+				VkAttachmentLoadOp.Load, VkAttachmentStoreOp.DontCare, VkImageLayout.ColorAttachmentOptimal);//final outpout
 			SubPass subpass0 = new SubPass ();
 			subpass0.AddColorReference (0, VkImageLayout.ColorAttachmentOptimal);
 			renderPass.AddSubpass (subpass0);
@@ -236,11 +239,16 @@ namespace vke {
 				w.DataSource = dataSource;
 
 			} catch (Exception ex) {
-				System.Diagnostics.Debug.WriteLine (ex.Message);
+				System.Diagnostics.Debug.WriteLine (ex);
 			}
 		}
 		protected void loadIMLFragment (string imlFragment, object dataSource = null) {			
 			iFace.LoadIMLFragment (imlFragment).DataSource = dataSource;			
+		}
+		protected T loadIMLFragment<T> (string imlFragment, object dataSource = null) {			
+			Widget tmp = iFace.LoadIMLFragment (imlFragment);
+			tmp.DataSource = dataSource;
+			return (T)Convert.ChangeType (tmp,typeof(T));
 		}
 		protected void closeWindow (string path) {
 			Widget g = iFace.FindByName (path);

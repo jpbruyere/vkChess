@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0"?>
-<Window Caption="Options" Left="10" Top="1" Width="70%" Height="Fit" CornerRadius="5" >
+<Window Caption="Options" Left="10" Top="1" Width="70%" Height="Fit" CornerRadius="5" Background="0.1,0.1,0.1,0.8">
     <VerticalStack Spacing="1" Margin="10" >
 		<HorizontalStack Height="Fit" Margin="5">
 			<Label Text="Stockfish executable path:"/>

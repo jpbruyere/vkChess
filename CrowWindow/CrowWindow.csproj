@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<AssemblyName>CrowWindow</AssemblyName>
@@ -15,7 +15,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Crow" Version="0.9.4-beta" />
+		<PackageReference Include="Crow" Version="0.9.3-beta" />
 		<PackageReference Include="vke" Version="0.2.0-beta" />
 		<PackageReference Include="SpirVTasks" Version="0.1.44" />
 	</ItemGroup>

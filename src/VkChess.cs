@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -37,16 +37,17 @@ namespace vkChess
 			System.Runtime.Loader.AssemblyLoadContext.Default.ResolvingUnmanagedDll+=resolveUnmanaged;
 		}
 #endif
+		VkChess(){}
 		static void Main (string [] args) {
 			Instance.VALIDATION = true;
 			//Instance.RENDER_DOC_CAPTURE = true;
 			//SwapChain.PREFERED_FORMAT = VkFormat.B8g8r8a8Unorm;
 			DeferredPbrRenderer.NUM_SAMPLES = VkSampleCountFlags.SampleCount1;
 			DeferredPbrRenderer.MAX_MATERIAL_COUNT = 5;
-			DeferredPbrRenderer.MRT_FORMAT = VkFormat.R32g32b32a32Sfloat;
-			DeferredPbrRenderer.HDR_FORMAT = VkFormat.R32g32b32a32Sfloat;
-			PbrModelTexArray.TEXTURE_DIM = 1024;
-			ShadowMapRenderer.SHADOWMAP_SIZE = 1024;
+			DeferredPbrRenderer.MRT_FORMAT = VkFormat.R16g16b16a16Sfloat;
+			DeferredPbrRenderer.HDR_FORMAT = VkFormat.R16g16b16a16Sfloat;
+			PbrModelTexArray.TEXTURE_DIM = 256;
+			ShadowMapRenderer.SHADOWMAP_SIZE = 512;
 
 			using (VkChess app = new VkChess ())
 				app.Run ();
@@ -190,7 +191,7 @@ namespace vkChess
 #else
 				renderer.recordDraw (cmds [i], i, instanceBuff, instancedCmds?.ToArray ());
 
-				this.recordUICmd (cmds[i], i);
+				recordUICmd (cmds[i], i);
 #endif
 				cmds [i].End ();
 			}
@@ -411,9 +412,10 @@ namespace vkChess
 				break;
 			case Glfw.Key.F2:
 				/*loadWindow (@"ui/board.crow", this);
-				NotifyValueChanged ("board", board);*/
+				*/
 				//loadWindow (@"ui/scene.crow", this.renderer.model);
-				loadWindow (@"ui/debug.crow", this);
+				loadWindow (@"ui/board.crow", this);
+				NotifyValueChanged ("board", board);
 				break;
 			case Glfw.Key.F3:
 				checkBoardIntegrity ();
@@ -492,6 +494,9 @@ namespace vkChess
 			Close ();
 		}
 		void onUndoClick (object sender, MouseButtonEventArgs e) {
+			undo();
+		}
+		void undo() {
 			lock (movesMutex) {
 				bool hintIsEnabled = EnableHint;
 				EnableHint = false;
@@ -507,35 +512,27 @@ namespace vkChess
 				EnableHint = hintIsEnabled;
 			}
 		}
-		public string StockfishDirectory {
-			get {
-				try
-				{
-					return System.IO.Path.GetDirectoryName(StockfishPath);	
-				}
-				catch
-				{
-					return Directory.GetCurrentDirectory();					
-				}
-				
-			}
-		}
 		 
 		void onFindStockfishPath (object sender, MouseButtonEventArgs e) {
-			/*loadIMLFragment (@"
-				<FileDialog Caption='Select SDK Folder' CurrentDirectory='/home'
-							ShowFiles='true' ShowHidden='true' OkClicked='onSelectStockfishPath'/>
-			",this);*/
+			string stockfishDir = string.IsNullOrEmpty(StockfishPath) ?
+				Directory.GetCurrentDirectory() : System.IO.Path.GetDirectoryName(StockfishPath);
+			string stockfishExe = string.IsNullOrEmpty(StockfishPath) ?
+				"" : System.IO.Path.GetFileName(StockfishPath);
 			
-			loadIMLFragment (@"
-				<FileDialog/>
-			",this);
-		}
-		public void onSelectStockfishPath (object sender, EventArgs e)
-		{			
-			StockfishPath = (sender as FileDialog).SelectedFileFullPath;
+			loadIMLFragment<FileDialog> (@"
+				<FileDialog Caption='Select SDK Folder' CurrentDirectory='" + stockfishDir + @"' SelectedFile='" + stockfishExe + @"'
+							ShowFiles='true' ShowHidden='true'/>",this)
+					.OkClicked += (sender, e) => {
+						StockfishPath = (sender as FileDialog).SelectedFileFullPath;
+					};			
 		}
 
+		public CommandGroup Commands => new CommandGroup (
+			new Command (()=>loadWindow ("ui/newGame.crow", this)) {Caption = "New Game"},
+			new Command (()=>loadWindow ("ui/main.crow", this)) {Caption = "Options"},
+			new Command (()=>undo()) {Caption = "Undo"},			
+			new Command (()=>Close()) {Caption = "Quit"}
+		);
 		void onNewGameClick (object sender, MouseButtonEventArgs e) {
 			loadWindow ("ui/newGame.crow", this);
 		}
@@ -1662,7 +1659,7 @@ namespace vkChess
 				new BezierPath (
 				pCaptured.Position,
 				pCapLastPos, Vector3.UnitZ),animationSteps));
-				
+			NotifyValueChanged ("board", board);				
 		}
 		void replaySilently () {
 			string [] moves = StockfishMoves.ToArray ();
@@ -1676,6 +1673,7 @@ namespace vkChess
 
 		void startTurn () {
 			syncStockfish ();
+			NotifyValueChanged ("board", board);
 
 			bool kingIsSafe = checkKingIsSafe ();
 			if (getLegalMoves ().Length == 0) {
@@ -1693,17 +1691,19 @@ namespace vkChess
 			//	BlacksAreAI = false;
 			//}
 
-			if (playerIsAi (CurrentPlayer))
-				sendToStockfish ("go movetime " + AISearchTime.ToString());
-			else if (enableHint)
+			if (playerIsAi (CurrentPlayer)) {
+				if (AISearchTime > 0)
+					sendToStockfish ("go movetime " + AISearchTime.ToString());
+				else
+					sendToStockfish ("go depth 1");
+			}else if (enableHint)
 				sendToStockfish ("go infinite");
 		}
 		void switchPlayer () {
 			BestMove = null;
 			CurrentState = GameState.Play;
 
-			CurrentPlayer = Opponent;
-
+			CurrentPlayer = Opponent;			
 			startTurn ();
 		}
 

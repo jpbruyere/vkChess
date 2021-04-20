@@ -1,4 +1,4 @@
-﻿
+
 icon {
 	Width="14";
 	Height="14";
@@ -7,12 +7,12 @@ icon {
 hsStatus {
 	Height="Fit";
 	Width="100";
-	Background="SeaGreen";
+	Background="#2E8BB6";
 	Margin="3";
 }
 labStatus {
 	Width="Fit";
-	Foreground="DarkGrey";
+	Foreground="LightGrey";
 	Font="serif bold, 10";
 	Margin="0";
 }

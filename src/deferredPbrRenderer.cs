@@ -79,7 +79,7 @@ namespace vkChess
 			}
 		};
 
-		public DescriptorSetWrites UiImageUpdate => new DescriptorSetWrites (dsMain, descLayoutMain.Bindings [8]);
+		//public DescriptorSetWrites UiImageUpdate => new DescriptorSetWrites (dsMain, descLayoutMain.Bindings [8]);
 
 		const float lightMoveSpeed = 0.1f;
 
@@ -210,8 +210,9 @@ namespace vkChess
                 new VkDescriptorSetLayoutBinding (4, VkShaderStageFlags.Fragment, VkDescriptorType.UniformBuffer),//lights
                 new VkDescriptorSetLayoutBinding (5, VkShaderStageFlags.Fragment, VkDescriptorType.UniformBuffer),//materials
             	new VkDescriptorSetLayoutBinding (6, VkShaderStageFlags.Fragment, VkDescriptorType.CombinedImageSampler),//shadow map
-				new VkDescriptorSetLayoutBinding (7, VkShaderStageFlags.Fragment, VkDescriptorType.CombinedImageSampler),//texture array
-				new VkDescriptorSetLayoutBinding (8, VkShaderStageFlags.Fragment, VkDescriptorType.CombinedImageSampler));//uiImage
+				new VkDescriptorSetLayoutBinding (7, VkShaderStageFlags.Fragment, VkDescriptorType.CombinedImageSampler)//texture array
+				//new VkDescriptorSetLayoutBinding (8, VkShaderStageFlags.Fragment, VkDescriptorType.CombinedImageSampler)
+                );//uiImage
 
 			descLayoutGBuff = new DescriptorSetLayout (dev,
                 new VkDescriptorSetLayoutBinding (0, VkShaderStageFlags.Fragment, VkDescriptorType.InputAttachment),//color + roughness
@@ -224,7 +225,9 @@ namespace vkChess
             descLayoutGBuff.SetName ("GBuff");
 
             using (GraphicPipelineConfig cfg = GraphicPipelineConfig.CreateDefault (VkPrimitiveTopology.TriangleList, NUM_SAMPLES)) {
-                cfg.rasterizationState.cullMode = VkCullModeFlags.Back;
+                
+                cfg.rasterizationState.cullMode = VkCullModeFlags.None;
+
                 if (NUM_SAMPLES != VkSampleCountFlags.SampleCount1) {
                     cfg.multisampleState.sampleShadingEnable = true;
                     cfg.multisampleState.minSampleShading = 0.5f;

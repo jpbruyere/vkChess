@@ -44,7 +44,7 @@
 				</ItemTemplate>
 			</ListBox>
 		</Expandable>
-		<ColorWheel Name="cw" Width="100" Height="100"/>
+		<!--<ColorWheel Name="cw" Width="100" Height="100"/>-->
 		<Slider SmallIncrement="0.01" LargeIncrement="0.1" Height="10" Minimum="0.0" Maximum="2.0" Value="{²../cw.InnerRadius}"/>
 		<HueSelector Focusable="true" Height="15" Hue="{²../cw.Hue}"/>
 		<Widget Width="30" Height="16" Background="{CurrentColor}"/>
