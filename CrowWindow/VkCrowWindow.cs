@@ -197,8 +197,9 @@ namespace vke {
 				DescriptorSetWrites dsw = new DescriptorSetWrites (descSet, dslBinding);
 				dsw.Write (dev, crowImage.Descriptor);
 
-				iFace.surf = new Crow.Cairo.ImageSurface (crowBuffer.MappedData, Crow.Cairo.Format.ARGB32,
-					(int)Width, (int)Height, (int)Width * 4);
+				iFace.surf = iFace.CreateSurfaceForData (crowBuffer.MappedData, (int)Width, (int)Height);
+				/*iFace.surf = new Crow.Cairo.ImageSurface (crowBuffer.MappedData, Crow.Cairo.Format.ARGB32,
+					(int)Width, (int)Height, (int)Width * 4);*/
 
 				PrimaryCommandBuffer cmd = cmdPoolCrow.AllocateAndStart (VkCommandBufferUsageFlags.OneTimeSubmit);
 				crowImage.SetLayout (cmd, VkImageAspectFlags.Color, VkImageLayout.Preinitialized, VkImageLayout.ShaderReadOnlyOptimal);

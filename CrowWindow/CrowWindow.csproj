@@ -4,7 +4,7 @@
 		<AssemblyName>CrowWindow</AssemblyName>
 		<TargetFrameworks>netstandard2.1</TargetFrameworks>
 		<IncludeDefaultNoneItems>false</IncludeDefaultNoneItems>
-		<Description>vke.net addon to creaet a vulkan window with crow gui support.</Description>
+		<Description>vke.net addon to creaet a vulkan window with C.R.O.W. gui support.</Description>
 		<PackageTags>vulkan gui ui c# vke.net</PackageTags>
 		<License>MIT</License>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -15,7 +15,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Crow" Version="0.9.3-beta" />
+		<PackageReference Include="Crow" Version="0.9.5-beta" />
 		<PackageReference Include="vke" Version="0.2.0-beta" />
 		<PackageReference Include="SpirVTasks" Version="0.1.44" />
 	</ItemGroup>

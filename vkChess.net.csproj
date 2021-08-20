@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<OutputType>Exe</OutputType>
+		<OutputType>WinExe</OutputType>
 		<TargetFrameworks>netcoreapp3.1</TargetFrameworks>
+		<TargetFramework>netcoreapp3.1</TargetFramework>
 		<EnableDefaultNoneItems>false</EnableDefaultNoneItems>
 		<EnableDefaultCompileItems>false</EnableDefaultCompileItems>		
 		<OutputPath>$(SolutionDir)build\$(Configuration)\</OutputPath>

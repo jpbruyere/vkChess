@@ -21,7 +21,7 @@
 using System;
 using System.ComponentModel;
 using Crow;
-using Crow.Cairo;
+using Crow.Drawing;
 //using vkvg;
 
 namespace vkChess
