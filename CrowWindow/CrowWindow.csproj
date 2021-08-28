@@ -12,6 +12,7 @@
 		<OutputPath>$(SolutionDir)build\$(Configuration)\</OutputPath>
 		<IntermediateOutputPath>$(SolutionDir)build\obj\$(Configuration)\</IntermediateOutputPath>
 
+		<EnableDefaultCompileItems>false</EnableDefaultCompileItems>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -19,6 +20,11 @@
 		<PackageReference Include="vke" Version="0.2.0-beta" />
 		<PackageReference Include="SpirVTasks" Version="0.1.44" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Include="src\**\*.cs" />
+	</ItemGroup>
+
 	<ItemGroup>
 		<GLSLShader Include="shaders\**\*.frag;shaders\**\*.vert;shaders\**\*.comp;shaders\**\*.geom" />
 	</ItemGroup>	

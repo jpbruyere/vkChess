@@ -114,7 +114,7 @@ namespace vkChess
 			camera.SetPosition (0, 0f, -12.0f);
 			camera.AspectRatio = Width / Height;
 
-			renderer = new DeferredPbrRenderer (dev, swapChain, presentQueue, cubemapPathes [2], camera.NearPlane, camera.FarPlane);
+			renderer = new DeferredPbrRenderer (dev, swapChain, presentQueue, cubemapPathes [0], camera.NearPlane, camera.FarPlane);
 			dev.WaitIdle ();
 			renderer.LoadModel (transferQ, "data/models/chess.glb");
 			camera.Model = Matrix4x4.CreateScale (0.5f);// Matrix4x4.CreateScale(1f / Math.Max(Math.Max(renderer.modelAABB.Width, renderer.modelAABB.Height), renderer.modelAABB.Depth));
