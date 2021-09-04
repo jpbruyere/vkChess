@@ -46,7 +46,7 @@ namespace vkChess {
 
     [DebuggerDisplay("{DebuggerDisplay}")]
     public class Piece {
-        static Vector4 blackColor = new Vector4(0.2f, 0.2f, 0.2f, 1f);
+        static Vector4 blackColor = new Vector4(0.03f, 0.03f, 0.03f, 1f);
         static Vector4 whiteColor = new Vector4(1.0f, 1.0f, 1.0f, 1f);
         public static HostBuffer<VkChess.InstanceData> instanceBuff;
 		public static VkChess.InstanceData[] boardDatas;

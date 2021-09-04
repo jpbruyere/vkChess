@@ -42,12 +42,11 @@ namespace vkChess
 			Instance.VALIDATION = true;
 			//Instance.RENDER_DOC_CAPTURE = true;
 			//SwapChain.PREFERED_FORMAT = VkFormat.B8g8r8a8Unorm;
-			DeferredPbrRenderer.NUM_SAMPLES = VkSampleCountFlags.SampleCount1;
 			DeferredPbrRenderer.MAX_MATERIAL_COUNT = 5;
 			DeferredPbrRenderer.MRT_FORMAT = VkFormat.R16g16b16a16Sfloat;
 			DeferredPbrRenderer.HDR_FORMAT = VkFormat.R16g16b16a16Sfloat;
-			PbrModelTexArray.TEXTURE_DIM = 256;
-			ShadowMapRenderer.SHADOWMAP_SIZE = 512;
+			PbrModelTexArray.TEXTURE_DIM = 512;
+			ShadowMapRenderer.SHADOWMAP_SIZE = 1024;
 
 			using (VkChess app = new VkChess ())
 				app.Run ();
@@ -86,6 +85,8 @@ namespace vkChess
 		vke.DebugUtils.Messenger dbgmsg;
 #endif
 		protected override void initVulkan () {
+			initLog ();
+
 			base.initVulkan ();
 
 #if DEBUG
@@ -114,9 +115,16 @@ namespace vkChess
 			camera.SetPosition (0, 0f, -12.0f);
 			camera.AspectRatio = Width / Height;
 
+			DeferredPbrRenderer.NUM_SAMPLES =  SampleCount;
+
 			renderer = new DeferredPbrRenderer (dev, swapChain, presentQueue, cubemapPathes [0], camera.NearPlane, camera.FarPlane);
-			dev.WaitIdle ();
-			renderer.LoadModel (transferQ, "data/models/chess.glb");
+
+			renderer.matrices.gamma = Gamma;
+			renderer.matrices.exposure = Exposure;
+			renderer.matrices.scaleIBLAmbient = IBLAmbient;
+			renderer.lights[0].color = new Vector4 (LightStrength);
+			//renderer.LoadModel (transferQ, "data/models/chess.glb");
+			renderer.LoadModel (transferQ, "/mnt/devel/vkChess.net/data/models/chess.glb");
 			camera.Model = Matrix4x4.CreateScale (0.5f);// Matrix4x4.CreateScale(1f / Math.Max(Math.Max(renderer.modelAABB.Width, renderer.modelAABB.Height), renderer.modelAABB.Depth));
 
 			UpdateFrequency = 5;
@@ -130,7 +138,6 @@ namespace vkChess
 
 			iFace.Load ("ui/chess.crow").DataSource = this;
 		}
-
 
 		Queue transferQ;
 		protected override void createQueues () {
@@ -209,6 +216,10 @@ namespace vkChess
 		}
 
 		public static bool updateInstanceCmds = true;
+		uint fpsAccum, fpsAccumCpt;
+
+		const int fpsAccumLimit = 20;
+
 
 		public override void Update () {
 			base.Update ();
@@ -229,7 +240,17 @@ namespace vkChess
 			if (Animation.HasAnimations)
 				renderer.shadowMapRenderer.updateShadowMap = true;
 
-			animationSteps = 5 + (int)fps / 5;
+			fpsAccum += fps;
+			fpsAccumCpt++;
+			if (fpsAccumCpt == fpsAccumLimit) {
+				uint fpsMean = fpsAccum / fpsAccumLimit;
+				uint curFrameTime = 1000 / fpsMean;
+				if (curFrameTime > UpdateFrequency)
+					animationSteps = 300 / (int)curFrameTime;
+				else
+					animationSteps = 60;
+				fpsAccum = fpsAccumCpt = 0;
+			}
 
 			Animation.ProcessAnimations ();
 			//Piece.FlushHostBuffer ();
@@ -306,7 +327,7 @@ namespace vkChess
 			double diffX = lastMouseX - xPos;
 			double diffY = lastMouseY - yPos;
 
-			if (GetButton (MouseButton.Right) == InputAction.Press) {
+			if (GetButton (MouseButton.Middle) == InputAction.Press) {
 				camera.Rotate ((float)-diffY, (float)-diffX);
 				updateViewRequested = true;
 				return;
@@ -344,9 +365,9 @@ namespace vkChess
 			}else
 				NotifyValueChanged ("DebugCurCell", "");
 		}
-		protected override void onMouseButtonDown (Glfw.MouseButton button) {
+		protected override void onMouseButtonDown (MouseButton button) {
 			base.onMouseButtonDown (button);
-			if (MouseIsInInterface)
+			if (MouseIsInInterface || button != MouseButton.Left)
 				return;
 
 			//if (waitAnimationFinished) {
@@ -420,6 +441,12 @@ namespace vkChess
 			case Glfw.Key.F3:
 				checkBoardIntegrity ();
 				break;
+			case Glfw.Key.F4:
+				if (modifiers.HasFlag (Modifier.Shift))
+					loadCurrentGame ();
+				else
+					saveCurrentGame ();
+				break;
 			case Glfw.Key.S:
 				syncStockfish ();
 				sendToStockfish ("go");
@@ -436,7 +463,7 @@ namespace vkChess
 				break;
 			case Glfw.Key.R:
 				CurrentState = GameState.Play;
-				resetBoard (true);
+				resetBoard ();
 				break;
 			//case Glfw.Key.Enter:
 			//plDebugDraw.UpdateLine (4, Vector3.Zero, vMouse, 1, 0, 1);
@@ -528,17 +555,14 @@ namespace vkChess
 		}
 
 		public CommandGroup Commands => new CommandGroup (
-			new Command (()=>loadWindow ("ui/newGame.crow", this)) {Caption = "New Game"},
-			new Command (()=>loadWindow ("ui/main.crow", this)) {Caption = "Options"},
-			new Command (()=>undo()) {Caption = "Undo"},			
-			new Command (()=>Close()) {Caption = "Quit"}
+			new Command ("New Game", ()=>loadWindow ("ui/newGame.crow", this)),
+			new Command ("Options", ()=>loadWindow ("ui/winOptions.crow", this)),
+#if DEBUG
+			new Command ("Log", ()=>loadWindow ("ui/winLog.crow", this)),
+#endif
+			new Command ("Undo", ()=>undo()),
+			new Command ("Redo", ()=>Close())
 		);
-		void onNewGameClick (object sender, MouseButtonEventArgs e) {
-			loadWindow ("ui/newGame.crow", this);
-		}
-		void onOptionsClick (object sender, MouseButtonEventArgs e) {
-			loadWindow ("ui/main.crow", this);
-		}
 		void onNewWhiteGame (object sender, MouseButtonEventArgs e) {
 			closeWindow ("ui/newGame.crow");
 
@@ -601,55 +625,77 @@ namespace vkChess
 
 		#region crow
 		public float Gamma {
-			get { return renderer.matrices.gamma; }
+			get => Configuration.Global.Get<float> ("Gamma", 1.2f);
 			set {
-				if (value == renderer.matrices.gamma)
+				if (value == Gamma)
 					return;
+				Configuration.Global.Set ("Gamma", value);
 				renderer.matrices.gamma = value;
 				NotifyValueChanged ("Gamma", value);
 				updateViewRequested = true;
 			}
 		}
 		public float Exposure {
-			get { return renderer.matrices.exposure; }
+			get => Configuration.Global.Get<float> ("Exposure", 2.0f);
 			set {
-				if (value == renderer.matrices.exposure)
+				if (value == Exposure)
 					return;
+				Configuration.Global.Set ("Exposure", value);
 				renderer.matrices.exposure = value;
 				NotifyValueChanged ("Exposure", value);
 				updateViewRequested = true;
 			}
 		}
 		public float IBLAmbient {
-			get { return renderer.matrices.scaleIBLAmbient; }
+			get => Configuration.Global.Get<float> ("IBLAmbient", 0.5f);
 			set {
-				if (value == renderer.matrices.scaleIBLAmbient)
+				if (value == IBLAmbient)
 					return;
+				Configuration.Global.Set ("IBLAmbient", value);
 				renderer.matrices.scaleIBLAmbient = value;
 				NotifyValueChanged ("IBLAmbient", value);
 				updateViewRequested = true;
 			}
 		}
 		public float LightStrength {
-			get { return renderer.lights [renderer.lightNumDebug].color.X; }
+			get => Configuration.Global.Get<float> ("LightStrength", 1);
 			set {
-				if (value == renderer.lights [renderer.lightNumDebug].color.X)
+				if (value == LightStrength)
 					return;
+				Configuration.Global.Set ("LightStrength", value);
 				renderer.lights [renderer.lightNumDebug].color = new Vector4 (value);
 				NotifyValueChanged ("LightStrength", value);
 				renderer.uboLights.Update (renderer.lights);
 			}
 		}
+		public VkSampleCountFlags SampleCount {
+			get => Configuration.Global.Get<VkSampleCountFlags> ("SampleCount", VkSampleCountFlags.SampleCount1);
+			set {
+				if (value == SampleCount)
+					return;
+				Configuration.Global.Set ("SampleCount", value);
+				DeferredPbrRenderer.NUM_SAMPLES = value;
+				NotifyValueChanged ("SampleCount", value);
+			}
+		}
 		#endregion
 
 		#region LOGS
-		List<string> logBuffer = new List<string> ();
-		void AddLog (string msg) {
-			if (string.IsNullOrEmpty (msg))
+		public CommandGroup LogContextMenu;
+		ObservableList<LogEntry> logs = new ObservableList<LogEntry>();
+		public ObservableList<LogEntry> MainLog => logs;
+		void initLog () {
+			LogContextMenu = new CommandGroup (new Command("Clear Log", () => ResetLog()));			
+		}
+		public void Log(LogType type, string message) {
+			if (string.IsNullOrEmpty (message))
 				return;
-			//logBuffer.Add (msg);
-			Console.WriteLine (msg);
-			NotifyValueChanged ("LogBuffer", logBuffer);
+			lock (logs)
+				logs.Add (new LogEntry(type, message));
+		}
+		public void ResetLog () {
+			lock (logs)
+				logs.Clear ();
 		}
 		#endregion
 
@@ -684,10 +730,10 @@ namespace vkChess
 			}
 		}
 		public bool StockfishNotFound {
-			get { return stockfish == null; }
+			get => stockfish == null;
 		}
 		public string StockfishPath {
-			get { return Configuration.Global.Get<string> ("StockfishPath"); }
+			get => Configuration.Global.Get<string> ("StockfishPath");
 			set {
 				if (value == StockfishPath)
 					return;
@@ -698,7 +744,7 @@ namespace vkChess
 			}
 		}
 		public int AISearchTime {
-			get { return Configuration.Global.Get<int> ("AISearchTime"); }
+			get => Configuration.Global.Get<int> ("AISearchTime");
 			set {
 				if (value == WhitesLevel)
 					return;
@@ -708,7 +754,7 @@ namespace vkChess
 			}
 		}
 		public int WhitesLevel {
-			get { return Configuration.Global.Get<int> ("WhitesLevel"); }
+			get => Configuration.Global.Get<int> ("WhitesLevel");
 			set {
 				if (value == WhitesLevel)
 					return;
@@ -718,7 +764,7 @@ namespace vkChess
 			}
 		}
 		public int BlacksLevel {
-			get { return Configuration.Global.Get<int> ("BlacksLevel"); }
+			get => Configuration.Global.Get<int> ("BlacksLevel");
 			set {
 				if (value == BlacksLevel)
 					return;
@@ -728,7 +774,7 @@ namespace vkChess
 			}
 		}
 		public bool WhitesAreAI {
-			get { return Configuration.Global.Get<bool> ("WhitesAreAI"); }
+			get => Configuration.Global.Get<bool> ("WhitesAreAI");
 			set {
 				if (value == WhitesAreAI)
 					return;
@@ -738,7 +784,7 @@ namespace vkChess
 			}
 		}
 		public bool BlacksAreAI {
-			get { return Configuration.Global.Get<bool> ("BlacksAreAI"); }
+			get => Configuration.Global.Get<bool> ("BlacksAreAI");
 			set {
 				if (value == BlacksAreAI)
 					return;
@@ -747,16 +793,11 @@ namespace vkChess
 				NotifyValueChanged ("BlacksAreAI", value);
 			}
 		}
-		string stockfishPositionCommand {
-			get {
-				string tmp = "position startpos moves ";
-				return
-					StockfishMoves.Count == 0 ? tmp : tmp + StockfishMoves.Aggregate ((i, j) => i + " " + j);
-			}
-		}
+		string stockfishPositionCommand
+			=> StockfishMoves.Count == 0 ? "" : StockfishMoves.Aggregate ((i, j) => i + " " + j);
 
 		public bool AutoPlayHint {
-			get { return Configuration.Global.Get<bool> ("AutoPlayHint"); }
+			get => Configuration.Global.Get<bool> ("AutoPlayHint");
 			set {
 				if (value == AutoPlayHint)
 					return;
@@ -766,8 +807,25 @@ namespace vkChess
 		}
 
 		public List<String> StockfishMoves {
-			get { return stockfishMoves; }
+			get => stockfishMoves;
 			set { stockfishMoves = value; }
+		}
+		void saveCurrentGame() {
+			Configuration.Global.Set ("CurrentGame", stockfishPositionCommand);
+		}
+		void loadCurrentGame() {
+			string curGame = Configuration.Global.Get<string> ("CurrentGame");
+			if (string.IsNullOrEmpty (curGame))
+				return;
+			stockfishMoves = curGame.Split (' ').ToList();
+			replaySilently ();
+
+			foreach (Piece p in whites)
+				p.MoveTo (p.BoardCell, true);
+			foreach (Piece p in whites)
+				p.MoveTo (p.BoardCell, true);
+
+			syncStockfish();
 		}
 
 		void initStockfish () {
@@ -807,7 +865,7 @@ namespace vkChess
 		void syncStockfish () {
 			NotifyValueChanged ("StockfishMoves", StockfishMoves);
 			sendToStockfish ("setoption name Skill Level value " + (CurrentPlayer == ChessColor.White ? WhitesLevel.ToString() : BlacksLevel.ToString()));
-			sendToStockfish (stockfishPositionCommand);
+			sendToStockfish ($"position startpos moves {stockfishPositionCommand}");
 		}
 		//void askStockfishIsReady () {
 		//	if (waitStockfishIsReady)
@@ -818,12 +876,18 @@ namespace vkChess
 		//	AddLog ("<= isready");
 		//}
 		void sendToStockfish (string msg) {
-			AddLog ("<= " + msg);
+#if DEBUG
+
+			Log (LogType.Normal, $"<= {msg}");
+#endif
 			//stockfish.WaitForInputIdle ();
 			stockfish.StandardInput.WriteLine (msg);
 		}
 		void P_Exited (object sender, EventArgs e) {
-			AddLog ("Stockfish Terminated");
+#if DEBUG
+
+			Log (LogType.High, "Stockfish Terminated");
+#endif
 		}
 		void dataReceived (object sender, DataReceivedEventArgs e) {
 			if (string.IsNullOrEmpty (e.Data))
@@ -834,7 +898,9 @@ namespace vkChess
 				string [] tmp = e.Data.Split (' ');
 
 				//if (tmp [0] != "readyok")
-				AddLog ("=> " + e.Data);
+#if DEBUG
+				Log (LogType.Normal, $"=> {e.Data}");
+#endif
 
 				switch (tmp [0]) {
 				case "readyok":
@@ -1446,7 +1512,9 @@ namespace vkChess
 		}
 		void previewBoard (string move) {
 			if (move.EndsWith ("K")) {
-				AddLog ("Previewing: " + move);
+#if DEBUG
+				Log (LogType.Debug, $"Previewing: {move}");
+#endif
 				move = move.Substring (0, 4);
 			}
 
@@ -1567,7 +1635,9 @@ namespace vkChess
 
 			Piece p = board [pStart.X, pStart.Y];
 			if (p == null) {
-				AddLog ("ERROR: impossible move.");
+#if DEBUG
+				Log (LogType.Error, $"impossible move: {move}");
+#endif
 				return;
 			}
 
@@ -1630,8 +1700,6 @@ namespace vkChess
 			Point pCurPos = getChessCell (move.Substring (2, 2));
 
 			Piece p = board [pCurPos.X, pCurPos.Y];
-
-			CurrentState = GameState.Play;
 
 			replaySilently ();
 

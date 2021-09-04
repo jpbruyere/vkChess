@@ -1,3 +1,5 @@
+﻿ControlHighlight = "DodgerBlue";
+LogFont = "consolas, 10";
 
 icon {
 	Width="14";
@@ -42,6 +44,10 @@ Button {
 	MinimumSize = "80, 30";	
 	Width="Fit";
 }
+Window {
+	CornerRadius="5";
+	Background="0.1,0.1,0.1,0.8";
+}
 Slider {
 	Foreground = "Jet";
 }
@@ -81,4 +87,10 @@ ColorSlider {
 	Focusable="true";
 	Height="14";
 	Margin="0";
+}
+LightingSlider {
+	Template = "ui/slider.tmp";
+	Height = "40";
+	Width = "Stretched";
+	CursorSize = "50";
 }

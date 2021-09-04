@@ -129,6 +129,8 @@ namespace vkChess
             shadowMapRenderer = new ShadowMapRenderer (dev, this, 32);
 
             init (nearPlane, farPlane, cubemapPath);
+
+            dev.WaitIdle ();
         }
 
         void init_renderpass () {

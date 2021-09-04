@@ -1,0 +1,11 @@
+﻿<?xml version="1.0"?>
+<Window Caption="Log" Width="Stretched" Height="20%" VerticalAlignment="Top" >
+	<VerticalStack RootDataLevel="true" >
+		<HorizontalStack Spacing="0">
+			<LogViewerWidget Name="log" Lines="{MainLog}" Font="${LogFont}" MaxScrollX="1000" ContextCommands="{LogContextMenu}"/>
+			<ScrollBar Name="scrollbarY" Value="{²../log.ScrollY}" CursorRatio="{../log.ChildHeightRatio}" Maximum="{../log.MaxScrollY}" />
+		</HorizontalStack>
+		<ScrollBar Style="HScrollBar" Name="scrollbarX" Value="{²../log.ScrollX}" Maximum="{../log.MaxScrollX}" SmallIncrement="30"/>
+	</VerticalStack>
+</Window>
+
